@@ -12,7 +12,10 @@ const GROUP: StringName = &"interactables"
 
 @export var prompt: String = "Interact"
 @export var hold_time: float = 1.0
+## Horizontal reach from the actor's feet.
 @export var radius: float = 2.2
+## Max vertical gap between the actor's feet and this point (keeps roof/ground prompts apart).
+@export var height_tolerance: float = 1.8
 @export var enabled: bool = true
 @export var one_shot: bool = false
 ## Optional: only usable by actors that satisfy this callable (set from code).
@@ -25,7 +28,10 @@ func _ready() -> void:
 
 
 func is_available_for(actor: Node3D) -> bool:
-	return enabled and actor.global_position.distance_to(global_position) <= radius
+	if not enabled:
+		return false
+	var offset: Vector3 = global_position - actor.global_position
+	return Vector2(offset.x, offset.z).length() <= radius and absf(offset.y) <= height_tolerance
 
 
 func meets_requirement(actor: Node3D) -> bool:

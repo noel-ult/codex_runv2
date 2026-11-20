@@ -455,7 +455,7 @@ func _spawn_npcs() -> void:
 	# Lab technicians commute between the SE bus stop and the facility through its gate.
 	var lab: Vector3 = facility.global_position
 	var commute: Array[Vector3] = [
-		Vector3(20.0, SIDEWALK_HEIGHT, 9.5), Vector3(29.0, 0.0, -4.0), lab + Vector3(0.0, 0.1, 14.0),
+		Vector3(14.0, SIDEWALK_HEIGHT, 8.2), Vector3(29.0, 0.0, -4.0), lab + Vector3(0.0, 0.1, 14.0),
 		lab + Vector3(-3.0, 0.1, 6.0), lab + Vector3(6.0, 0.1, 10.0), lab + Vector3(0.0, 0.1, 16.0), Vector3(29.0, 0.0, -4.0),
 	]
 	for t: int in 3:

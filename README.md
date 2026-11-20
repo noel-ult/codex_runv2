@@ -86,7 +86,7 @@ Visor/halo colour shows state: **green** PATROL, **amber** INVESTIGATE, **red** 
 
 ## NPCs and disguises
 
-Civilians walk the sidewalks, and **lab technicians** commute between the SE bus stop and the lab. Get **behind** one and hold E to **clone their ID**: you take on their exact outfit.
+Civilians walk the sidewalks, and **lab technicians** commute between the SE bus stop and the lab. Walk up behind (or beside) one: a floating cue turns green when you're in position. Hold E for 1.2 s to **clone their ID**. The NPC stops while you work, and you take on their exact outfit.
 - **Technician IDs** open the staff gate and loading-bay shutter.
 - **While disguised and walking**, cameras, the searchlight, turrets and drones ignore you, and the Codex Release radius shrinks.
 - **The disguise breaks** if you run, use Micro-Fusions or Full Form, fire a gadget, Ignite, enter the restricted server room, get inspected by an alerted Hunter, or after 2 minutes.
