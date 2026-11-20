@@ -64,6 +64,7 @@ var _dash_trail: GPUParticles3D
 @onready var _interaction_ray: RayCast3D = $CameraPivot/SpringArm3D/Camera3D/InteractionRay
 @onready var _visual: Node3D = $Visual
 @onready var _rig: HumanoidRig = $Visual/Rig
+@onready var _gadgets: GadgetBelt = $GadgetBelt
 
 
 func _ready() -> void:
@@ -76,12 +77,29 @@ func _ready() -> void:
 	_codex.resonance_changed.connect(_on_resonance_changed)
 	_codex.codex_ignited.connect(_on_ignited)
 	_codex.feedback.connect(_relay_feedback)
+	_gadgets.feedback.connect(_relay_feedback)
 	_on_form_changed(_codex.form)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func get_codex() -> CodexSignalSystem:
 	return _codex
+
+
+func get_gadgets() -> GadgetBelt:
+	return _gadgets
+
+
+## Horizontal direction the Runner's body is facing.
+func get_facing() -> Vector3:
+	var forward: Vector3 = -_visual.global_basis.z
+	forward.y = 0.0
+	return forward.normalized()
+
+
+## Pickup contract (see Pickup).
+func collect_pickup(kind: StringName, amount: int) -> bool:
+	return _gadgets.collect(kind, amount)
 
 
 func get_view_camera() -> Camera3D:
@@ -146,6 +164,7 @@ func _physics_process(delta: float) -> void:
 		_handle_form_toggle()
 		_handle_jumps()
 		_handle_micro_dash(move_direction)
+		_gadgets.handle_input()
 	_apply_horizontal_movement(move_direction, delta)
 	_handle_interaction(delta)
 

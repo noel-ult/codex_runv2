@@ -50,6 +50,7 @@ func _ready() -> void:
 	_build_street_furniture()
 	_build_parked_cars()
 	_build_uplinks()
+	_build_pickups()
 	_build_vehicle_routes()
 	_collect_points()
 	_bake_navigation()
@@ -429,6 +430,30 @@ func _build_uplinks() -> void:
 		station.rotation_degrees = Vector3(0.0, spec.z, 0.0)
 		add_child(station)
 		uplink_stations.append(station)
+
+
+# --- Pickups ---------------------------------------------------------------------------
+
+func _build_pickups() -> void:
+	var cells: Array[Vector3] = [
+		Vector3(-29.0, 0.1, -29.0), Vector3(-39.75, 12.1, -39.75), Vector3(-36.0, 0.1, 35.0),
+		Vector3(58.5, 0.0, 9.0), Vector3(29.0, 8.4, 18.25), Vector3(29.0, 0.1, 23.0),
+		Vector3(-60.0, 0.0, -68.0), Vector3(66.0, 0.0, 52.0), Vector3(-36.0, 3.1, 11.5),
+	]
+	for at: Vector3 in cells:
+		_add_pickup(at, Pickup.KIND_CELL, 1)
+	for at: Vector3 in [Vector3(-10.0, 0.1, 10.0), Vector3(10.0, 0.1, 40.0), Vector3(-40.0, 0.1, -10.0)]:
+		_add_pickup(at, Pickup.KIND_DARTS, 3)
+	for at: Vector3 in [Vector3(-30.0, 0.1, 25.0), Vector3(58.5, 0.0, -10.0)]:
+		_add_pickup(at, Pickup.KIND_EMP, 1)
+
+
+func _add_pickup(at: Vector3, kind: StringName, amount: int) -> void:
+	var pickup := Pickup.new()
+	pickup.kind = kind
+	pickup.amount = amount
+	pickup.position = at
+	add_child(pickup)
 
 
 # --- Traffic ----------------------------------------------------------------------

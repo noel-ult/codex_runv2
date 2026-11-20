@@ -48,6 +48,7 @@ var _sweep_active: bool = false
 var _sweep_scanning: bool = false
 var _sweep_site: Vector3 = Vector3.ZERO
 var _sweep_left: float = 0.0
+var _decoy_check_left: float = 0.0
 
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
 @onready var _indicator: MeshInstance3D = $StateIndicator
@@ -199,6 +200,7 @@ func _physics_process(delta: float) -> void:
 	_animate_indicator()
 	_animate_rig(delta)
 	_check_contact()
+	_check_decoys(delta)
 
 
 func _tick_patrol() -> void:
@@ -361,6 +363,21 @@ func _check_contact() -> void:
 		if body.is_in_group(&"runner"):
 			runner_touched.emit(self)
 			return
+
+
+## Alerted hunters shoot apart any decoy emitter they get close to.
+func _check_decoys(delta: float) -> void:
+	_decoy_check_left -= delta
+	if _decoy_check_left > 0.0 or state == State.PATROL:
+		return
+	_decoy_check_left = 0.3
+	for node: Node in get_tree().get_nodes_in_group(&"decoy_emitters"):
+		var decoy := node as Node3D
+		if decoy == null or decoy.global_position.distance_to(global_position) > 4.0:
+			continue
+		if decoy.has_method(&"hunter_disable"):
+			HunterFX.beam(get_parent(), global_position + Vector3(0.0, 1.4, 0.0), decoy.global_position + Vector3(0.0, 1.3, 0.0), HunterAgent.state_to_color(state))
+			decoy.call(&"hunter_disable")
 
 
 func _on_catch_body_entered(body: Node3D) -> void:
