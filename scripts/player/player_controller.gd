@@ -10,6 +10,7 @@ extends CharacterBody3D
 signal interaction_prompt_changed(text: String, progress: float)
 signal captured(total_captures: int)
 signal feedback(message: String)
+signal disguise_changed(active: bool, role: String, seconds_left: float)
 
 @export_group("Movement")
 @export var base_speed: float = 4.5
@@ -37,6 +38,11 @@ signal feedback(message: String)
 @export var aim_range: float = 45.0
 @export var kill_floor_y: float = -25.0
 
+@export_group("Disguise")
+@export var disguise_duration: float = 120.0
+## Moving faster than this while disguised draws attention (cameras/turrets see through it).
+@export var disguise_max_speed: float = 5.0
+
 var captures: int = 0
 var carrying_device: bool = false
 var input_enabled: bool = true
@@ -60,6 +66,10 @@ var _slow_left: float = 0.0
 var _slow_factor: float = 1.0
 var _tether_left: float = 0.0
 var _tether_anchor: Vector3 = Vector3.ZERO
+var _disguise_left: float = 0.0
+var _disguise_role: String = ""
+var _restricted_count: int = 0
+var _disguise_tick: float = 0.0
 
 @onready var _codex: CodexSignalSystem = $CodexSignalSystem
 @onready var _camera_pivot: Node3D = $CameraPivot
@@ -81,7 +91,12 @@ func _ready() -> void:
 	_codex.resonance_changed.connect(_on_resonance_changed)
 	_codex.codex_ignited.connect(_on_ignited)
 	_codex.feedback.connect(_relay_feedback)
+	_codex.micro_fusion_triggered.connect(func(_a: StringName, _s: float) -> void: break_disguise("Micro-Fusion surge"))
+	_codex.form_changed.connect(func(f: StringName) -> void:
+		if f == CodexSignalSystem.FORM_FULL:
+			break_disguise("Full Form"))
 	_gadgets.feedback.connect(_relay_feedback)
+	_gadgets.gadget_used.connect(func(_g: StringName) -> void: break_disguise("Gadget use"))
 	_on_form_changed(_codex.form)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -128,6 +143,74 @@ func teleport(target: Vector3) -> void:
 	velocity = Vector3.ZERO
 
 
+# --- Disguise ------------------------------------------------------------------------
+
+## Takes on a cloned NPC appearance. `staff` grants facility access (gate, loading bay).
+func apply_disguise(style_id: int, outfit: int, staff: bool, role: String) -> void:
+	_codex.set_full_form(false)
+	_rig.apply_style(style_id as HumanoidRig.Style, outfit)
+	_rig.set_carry_visible(carrying_device)
+	_disguise_left = disguise_duration
+	_disguise_role = role
+	if staff:
+		add_to_group(&"facility_staff")
+	_codex.release_radius_scale = 0.7
+	_on_resonance_changed(_codex.resonance, _codex.max_resonance)
+	feedback.emit("Disguised as %s. Walk - don't run, no powers or gadgets." % role)
+	disguise_changed.emit(true, role, _disguise_left)
+
+
+func break_disguise(reason: String) -> void:
+	if _disguise_left <= 0.0:
+		return
+	_disguise_left = 0.0
+	_disguise_role = ""
+	remove_from_group(&"facility_staff")
+	_codex.release_radius_scale = 1.0
+	_rig.apply_style(HumanoidRig.Style.RUNNER, 0)
+	_rig.set_carry_visible(carrying_device)
+	_on_resonance_changed(_codex.resonance, _codex.max_resonance)
+	feedback.emit("Disguise blown: %s" % reason)
+	disguise_changed.emit(false, "", 0.0)
+
+
+func is_disguised() -> bool:
+	return _disguise_left > 0.0
+
+
+## Security systems call this: a disguise fools them only if you behave like staff.
+func is_disguise_convincing() -> bool:
+	if _disguise_left <= 0.0 or _restricted_count > 0 or _codex.is_ignited or is_impaired():
+		return false
+	return Vector2(velocity.x, velocity.z).length() <= disguise_max_speed
+
+
+func enter_restricted(_zone: Node) -> void:
+	_restricted_count += 1
+
+
+func exit_restricted(_zone: Node) -> void:
+	_restricted_count = maxi(_restricted_count - 1, 0)
+
+
+## Called by alerted Hunters that bump into a disguised Runner.
+func inspect_disguise() -> void:
+	break_disguise("A Hunter saw through it")
+
+
+func _update_disguise(delta: float) -> void:
+	if _disguise_left <= 0.0:
+		return
+	_disguise_left -= delta
+	_disguise_tick -= delta
+	if _disguise_tick <= 0.0:
+		_disguise_tick = 1.0
+		disguise_changed.emit(true, _disguise_role, maxf(_disguise_left, 0.0))
+	if _disguise_left <= 0.0:
+		_disguise_left = 0.01
+		break_disguise("ID signature expired")
+
+
 ## Hunter Tether Harpoon: slows the Runner and reels them toward the anchor.
 func apply_tether(anchor: Vector3, duration: float) -> void:
 	_tether_left = maxf(_tether_left, duration)
@@ -157,6 +240,7 @@ func on_caught() -> void:
 	_slow_left = 0.0
 	_shake = 0.6
 	_codex.reset_resonance()
+	break_disguise("Captured")
 	captured.emit(captures)
 
 
@@ -196,6 +280,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_face_movement(delta)
 	_animate(delta)
+	_update_disguise(delta)
 
 	if global_position.y < kill_floor_y:
 		global_transform = _spawn_transform
@@ -435,6 +520,7 @@ func _on_resonance_changed(value: float, max_value: float) -> void:
 
 func _on_ignited(_broadcasting: bool) -> void:
 	_shake = maxf(_shake, 0.5)
+	break_disguise("Codex Ignition")
 
 
 func _relay_feedback(message: String) -> void:

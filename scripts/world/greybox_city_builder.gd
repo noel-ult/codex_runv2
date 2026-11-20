@@ -27,6 +27,7 @@ var dead_zones: Array[DeadZone] = []
 var traffic_vehicles: Array[TrafficVehicle] = []
 var uplink_stations: Array[UplinkStation] = []
 var facility: FacilityCompound
+var npcs: Array[NpcWalker] = []
 var patrol_points: Array[Vector3] = []
 var hunter_spawn_points: Array[Vector3] = []
 var player_spawn_point: Vector3 = Vector3(0.0, 0.2, 29.0)
@@ -54,6 +55,7 @@ func _ready() -> void:
 	_build_vehicle_routes()
 	_collect_points()
 	_bake_navigation()
+	_spawn_npcs()
 	city_built.emit()
 
 
@@ -431,6 +433,47 @@ func _build_uplinks() -> void:
 		station.rotation_degrees = Vector3(0.0, spec.z, 0.0)
 		add_child(station)
 		uplink_stations.append(station)
+
+
+# --- NPCs ------------------------------------------------------------------------------
+
+func _spawn_npcs() -> void:
+	var seed_value: int = 1
+	for ix: int in [-1, 1]:
+		for iz: int in [-1, 1]:
+			if ix == 1 and iz == -1:
+				continue
+			var c: Vector3 = _block_center(ix, iz) + Vector3(0.0, SIDEWALK_HEIGHT, 0.0)
+			var e: float = BLOCK_SIZE * 0.5 - 1.6
+			var loop: Array[Vector3] = [c + Vector3(-e, 0.0, -e), c + Vector3(e, 0.0, -e), c + Vector3(e, 0.0, e), c + Vector3(-e, 0.0, e)]
+			for n: int in 2:
+				var route: Array[Vector3] = loop.duplicate()
+				if n == 1:
+					route.reverse()
+				_add_npc(HumanoidRig.Style.CIVILIAN, seed_value, route, n * 2)
+				seed_value += 1
+	# Lab technicians commute between the SE bus stop and the facility through its gate.
+	var lab: Vector3 = facility.global_position
+	var commute: Array[Vector3] = [
+		Vector3(20.0, SIDEWALK_HEIGHT, 9.5), Vector3(29.0, 0.0, -4.0), lab + Vector3(0.0, 0.1, 14.0),
+		lab + Vector3(-3.0, 0.1, 6.0), lab + Vector3(6.0, 0.1, 10.0), lab + Vector3(0.0, 0.1, 16.0), Vector3(29.0, 0.0, -4.0),
+	]
+	for t: int in 3:
+		var route: Array[Vector3] = commute.duplicate()
+		for k: int in t * 2:
+			route.push_back(route.pop_front())
+		_add_npc(HumanoidRig.Style.TECHNICIAN, 100 + t, route, 0)
+
+
+func _add_npc(npc_style: HumanoidRig.Style, seed_value: int, route: Array[Vector3], start_index: int) -> void:
+	var npc := NpcWalker.new()
+	npc.style = npc_style
+	npc.outfit_seed = seed_value
+	npc.route = route
+	npc.name = "NPC_%d" % seed_value
+	add_child(npc)
+	npc.global_position = route[start_index % route.size()] + Vector3(0.0, 0.2, 0.0)
+	npcs.append(npc)
 
 
 # --- Pickups ---------------------------------------------------------------------------

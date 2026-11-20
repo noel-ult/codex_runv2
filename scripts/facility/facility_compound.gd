@@ -372,6 +372,23 @@ func _build_server_room() -> void:
 	shield.position = Vector3(1.0, 3.0, -10.5)
 	add_child(shield)
 	dead_zones.append(shield)
+	var restricted := Area3D.new()
+	restricted.name = "RestrictedZone"
+	restricted.collision_layer = 0
+	restricted.collision_mask = 2
+	restricted.position = Vector3(1.0, 3.0, -10.5)
+	var restricted_shape := CollisionShape3D.new()
+	var restricted_box := BoxShape3D.new()
+	restricted_box.size = Vector3(23.0, 6.0, 8.6)
+	restricted_shape.shape = restricted_box
+	restricted.add_child(restricted_shape)
+	add_child(restricted)
+	restricted.body_entered.connect(func(body: Node3D) -> void:
+		if body.has_method(&"enter_restricted"):
+			body.call(&"enter_restricted", restricted))
+	restricted.body_exited.connect(func(body: Node3D) -> void:
+		if body.has_method(&"exit_restricted"):
+			body.call(&"exit_restricted", restricted))
 
 	# Database terminal at the end of the aisle.
 	database_terminal = Interactable.new()
