@@ -25,7 +25,10 @@ signal suit_extraction_changed(enabled: bool)
 
 const RELAY_SPOOF_SECONDS: float = 24.0
 const RELAY_SPOOF_COLOR: Color = Color(0.78, 0.56, 1.0)
+const DEMO_UPLOAD_SECONDS: float = 6.0
 const CHECKPOINT_PATH: String = "user://mission_checkpoint.cfg"
+
+enum Checkpoint { NONE = -1, PACKET, CREDENTIALS, CORE, CIPHER, COMPLETE }
 
 @export var transmit_duration: float = 50.0
 @export var transmit_radius: float = 16.0
@@ -38,6 +41,7 @@ var has_credentials: bool = false
 var inside_core: bool = false
 var has_cipher: bool = false
 var transmitting: bool = false
+var demo_upload: bool = false
 var completed: bool = false
 var transmit_progress: float = 0.0
 
@@ -55,6 +59,9 @@ var _alarm_left: float = 0.0
 var _lockout_left: float = 0.0
 var _cctv_cooldown: float = 0.0
 var _hideout: Hideout
+var _restore_lockdown_pending: bool = false
+var _saved_step: int = Checkpoint.NONE
+var _relay_seed: int
 var _release_interval_before_lockdown: float = 30.0
 
 
@@ -67,8 +74,12 @@ func setup(player: PlayerController, compound: FacilityCompound, stations: Array
 	_stations = stations
 	_terminal = terminal
 	_director = director
+	var checkpoint := ConfigFile.new()
+	_relay_seed = rng_seed
+	if checkpoint.load(CHECKPOINT_PATH) == OK:
+		_relay_seed = int(checkpoint.get_value("mission", "relay_seed", rng_seed))
 	var rng := RandomNumberGenerator.new()
-	rng.seed = rng_seed
+	rng.seed = _relay_seed
 	_genuine = _stations[rng.randi_range(0, _stations.size() - 1)]
 	_genuine.is_genuine = true
 	_select_spoof_station()
@@ -100,11 +111,17 @@ func setup(player: PlayerController, compound: FacilityCompound, stations: Array
 
 func start() -> void:
 	var checkpoint := ConfigFile.new()
-	if checkpoint.load(CHECKPOINT_PATH) == OK and checkpoint.get_value("mission", "credentials", false) == true:
-		_unlock_credentials()
-		_player.teleport(_hideout.get_checkpoint_position())
+	if checkpoint.load(CHECKPOINT_PATH) == OK:
+		var legacy_step: int = Checkpoint.CREDENTIALS if checkpoint.get_value("mission", "credentials", false) == true else Checkpoint.NONE
+		_saved_step = clampi(int(checkpoint.get_value("mission", "step", legacy_step)), Checkpoint.NONE, Checkpoint.COMPLETE)
+	if _saved_step != Checkpoint.NONE:
+		if _saved_step >= Checkpoint.CREDENTIALS:
+			_unlock_credentials()
+			_player.teleport(_hideout.get_checkpoint_position())
+		_restore_saved_step()
 		_publish()
-		radio_message.emit("Checkpoint loaded at Storage 07. Head for Meridian Signal Labs (NE).")
+		if not completed:
+			radio_message.emit("Mission checkpoint loaded. Follow the marked objective.")
 		return
 	_publish()
 	radio_message.emit("Copy an unaware Hunter's suit packet from behind. Then move to Storage 07 on the west edge and decode it in shelter for lab access.")
@@ -115,6 +132,40 @@ func bind_decoder(hideout: Hideout) -> void:
 	_hideout = hideout
 	_hideout.decoder.completed.connect(_on_decoder_used)
 	_refresh_decoder()
+
+
+func save_checkpoint() -> void:
+	if demo_upload:
+		radio_message.emit("Judging demo progress cannot be saved.")
+		return
+	var step: int = current_objective()
+	if step == Checkpoint.PACKET and not has_suit_packet:
+		radio_message.emit("Complete a mission objective before saving.")
+		return
+	var checkpoint := ConfigFile.new()
+	checkpoint.set_value("mission", "step", step)
+	checkpoint.set_value("mission", "relay_seed", _relay_seed)
+	if checkpoint.save(CHECKPOINT_PATH) != OK:
+		radio_message.emit("Checkpoint could not be saved.")
+		return
+	_saved_step = step
+	radio_message.emit("Mission checkpoint saved.")
+
+
+func _restore_saved_step() -> void:
+	has_suit_packet = _saved_step == Checkpoint.PACKET
+	suit_extraction_changed.emit(not has_suit_packet and not has_credentials)
+	_refresh_decoder()
+	if _saved_step >= Checkpoint.CORE:
+		inside_core = true
+		_compound.server_door.open()
+		_compound.server_door_panel.enabled = false
+	if _saved_step >= Checkpoint.CIPHER:
+		_restore_cipher()
+	if _saved_step == Checkpoint.COMPLETE:
+		_complete()
+	elif has_cipher:
+		_restore_lockdown_pending = true
 
 
 func clear_checkpoint() -> bool:
@@ -154,8 +205,11 @@ func on_runner_captured(_total: int) -> void:
 	suit_extraction_changed.emit(not has_credentials)
 	_refresh_decoder()
 	mission_reset.emit()
+	_restore_saved_step()
 	_publish()
-	if has_credentials:
+	if _saved_step >= Checkpoint.CORE or _saved_step == Checkpoint.PACKET:
+		radio_message.emit("Captured. Your saved mission objective has been restored.")
+	elif has_credentials:
 		radio_message.emit("Captured. Back at the Storage 07 checkpoint with your lab credentials. Head for Meridian Signal Labs (NE).")
 	else:
 		radio_message.emit("Captured. Copy a new Hunter packet and decode it at Storage 07.")
@@ -166,6 +220,9 @@ func on_runner_captured(_total: int) -> void:
 func _physics_process(delta: float) -> void:
 	if _player == null or completed:
 		return
+	if _restore_lockdown_pending and NavigationServer3D.map_get_iteration_id(_player.get_world_3d().navigation_map) > 0:
+		_restore_lockdown_pending = false
+		_start_lockdown()
 	_elapsed += delta
 	_cctv_cooldown = maxf(_cctv_cooldown - delta, 0.0)
 	if _lockout_left > 0.0:
@@ -188,7 +245,7 @@ func _on_suit_packet_copied() -> void:
 	suit_extraction_changed.emit(false)
 	_refresh_decoder()
 	_publish()
-	radio_message.emit("Packet copied. Keep moving! Take it to the HunterNet decoder inside Storage 07, then hold E to hack from shelter.")
+	radio_message.emit("Packet copied. Press Ctrl+S to save. Take it to the HunterNet decoder inside Storage 07, then hold E to hack from shelter.")
 
 
 func _refresh_decoder() -> void:
@@ -230,7 +287,7 @@ func _on_core_opened() -> void:
 	if not has_credentials or completed:
 		return
 	inside_core = true
-	radio_message.emit("You're in the HunterNet core. The room is Faraday-shielded - your Release is masked here.")
+	radio_message.emit("You're in the HunterNet core. Press Ctrl+S to save your progress.")
 	_publish()
 
 
@@ -255,22 +312,24 @@ func _on_session_completed(session_id: StringName) -> void:
 			if not has_suit_packet or has_credentials or _hideout == null or not _hideout.protects_runner(_player):
 				return
 			_unlock_credentials()
-			var checkpoint := ConfigFile.new()
-			checkpoint.set_value("mission", "credentials", true)
-			var saved: bool = checkpoint.save(CHECKPOINT_PATH) == OK
-			var status: String = "Checkpoint saved." if saved else "Checkpoint active for this run. Disk save failed."
-			radio_message.emit("Lab credentials recovered. %s Head for Meridian Signal Labs (NE)." % status)
+			radio_message.emit("Lab credentials recovered. Head for Meridian Signal Labs (NE).")
+			save_checkpoint()
 		&"database":
 			if not has_credentials or has_cipher or completed:
 				return
-			has_cipher = true
-			_player.set_carrying_device(true)
-			_genuine.set_revealed()
-			_refresh_facility_marker()
-			marker_changed.emit(&"uplink", _genuine.get_marker_position(), "UPLINK %s" % _genuine.station_label, Color(0.35, 1.0, 0.5), true)
-			_refresh_spoof_relay()
+			_restore_cipher()
 			_start_lockdown()
+			radio_message.emit("Database breached. Press Ctrl+S to save your progress.")
 	_publish()
+
+
+func _restore_cipher() -> void:
+	has_cipher = true
+	_player.set_carrying_device(true)
+	_genuine.set_revealed()
+	_refresh_facility_marker()
+	marker_changed.emit(&"uplink", _genuine.get_marker_position(), "UPLINK %s" % _genuine.station_label, Color(0.35, 1.0, 0.5), true)
+	_refresh_spoof_relay()
 
 
 func _on_session_aborted(session_id: StringName, traced: bool) -> void:
@@ -353,24 +412,45 @@ func _on_station_used(interactable: Interactable, actor: Node3D) -> void:
 		return
 	if interactable != _genuine.interactable or not has_cipher or transmitting or completed:
 		return
+	_begin_transmission()
+
+
+func _begin_transmission() -> void:
 	transmitting = true
 	transmit_progress = 0.0
 	_genuine.set_handshake(false)
 	_genuine.set_transmission(0.0)
 	_refresh_spoof_relay()
+	if demo_upload:
+		radio_message.emit("JUDGING DEMO · Final upload in progress.")
+		_publish()
+		return
 	radio_message.emit("Uplink open! Hold within %d m of the relay for %d s - it broadcasts your position." % [int(transmit_radius), int(transmit_duration)])
 	_publish()
 
 
 func _update_transmission(delta: float) -> void:
 	var in_range: bool = _player.global_position.distance_to(_genuine.global_position) <= transmit_radius
-	if in_range:
-		transmit_progress = minf(transmit_progress + delta / transmit_duration, 1.0)
-	signal_reported.emit(_player.global_position)
+	if in_range or demo_upload:
+		var duration: float = DEMO_UPLOAD_SECONDS if demo_upload else transmit_duration
+		transmit_progress = minf(transmit_progress + delta / duration, 1.0)
+	if not demo_upload:
+		signal_reported.emit(_player.global_position)
 	_genuine.set_transmission(transmit_progress)
-	transmission_progress.emit(transmit_progress, in_range)
+	transmission_progress.emit(transmit_progress, in_range or demo_upload)
 	if transmit_progress >= 1.0:
 		_complete()
+
+
+func start_demo_upload() -> void:
+	if completed or demo_upload:
+		return
+	demo_upload = true
+	_player.input_enabled = false
+	_player.teleport(_genuine.to_global(Vector3(0.0, 0.25, 7.0)))
+	_player.face_camera_toward(_genuine.global_position)
+	_genuine.set_revealed()
+	_begin_transmission()
 
 
 func _complete() -> void:
@@ -388,7 +468,7 @@ func _complete() -> void:
 func current_objective() -> int:
 	if completed:
 		return 4
-	if has_cipher:
+	if has_cipher or demo_upload:
 		return 3
 	if inside_core:
 		return 2

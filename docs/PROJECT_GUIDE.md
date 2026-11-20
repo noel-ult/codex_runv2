@@ -42,9 +42,9 @@ Cipher Recovery gives a clue on each submitted tile. Green marks an exact match,
 
 After the database breach, an optional violet marker identifies a dormant relay. A false handshake there can divert up to two Hunters for 24 seconds. The opportunity closes when the real transmission starts and resets on capture.
 
-Capture before mission completion closes any active hack and resets the alert configuration and objectives. Before the decode it returns the Runner to the original spawn and resets the packet-copy objective. After the decode it returns the Runner to Storage 07 with lab credentials and resets core access, database cipher, relay reveal and transmission progress. Gear, credits and purchased prep upgrades stay with the player. The credential decode awards salvage once per run.
+Capture restores the latest saved objective and clears the active hack and any unfinished upload. Gear, credits, and prep upgrades stay with the Runner during capture. After decoding, the Runner respawns at Storage 07.
 
-Decoding is the only mission milestone saved to disk. Relaunching with the checkpoint starts at Storage 07 with credentials, starting inventory, starting credits and the decode salvage reward. Pressing R during gameplay or confirming **Restart Run** in Pause/Controls clears the checkpoint and starts a fresh run.
+Credential decode auto-saves. Ctrl+S saves the packet, core access, breach or completed transmission milestone. Relaunch restores objective state with starting inventory and credits, plus the decode salvage reward if earned. Restart Run clears the checkpoint.
 
 Storage 07 protects the Runner from Hunter contact while inside its defined interior and masks Codex emissions. Entering shelter detaches an existing harpoon tether and rejects new tether effects. Other Dead Zones mask signals. The shelter bounds are checked directly in local space, including immediately after a teleport. Decoding requires reaching the actual indoor decoder. The world continues simulating while hacking, so a database hack outside the shelter can still be interrupted by capture.
 

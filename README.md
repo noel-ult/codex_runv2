@@ -29,6 +29,10 @@ In the editor, import `project.godot` and press **F5**. The game starts in `res:
 
 ## Play the heist
 
+The opening cutscene shows the Runner's first contact with the Codex. Press **Space** or **Esc** to skip to gameplay.
+
+**Judging shortcut:** Press **Ctrl + Shift + F10** while on foot during gameplay to jump to the live relay, watch a six-second upload, and see the transmission finale. The ending screen labels it as a judging demo. Press **R** to start a fresh run and clear any credential checkpoint.
+
 ### Main mission
 
 You carry the **Codex**. Send it to safety through the Hunters’ own uplink.
@@ -41,9 +45,9 @@ You carry the **Codex**. Send it to safety through the Hunters’ own uplink.
 
 ### Checkpoint and capture
 
-Before decoding, capture sends you back to the packet-copy step. After decoding, capture returns you to Storage 07 with your lab credentials and resets core access, the database breach and uplink progress. Your gear, upgrades and credits survive capture. The sheltered room at Storage 07 protects you from Hunter capture and breaks an active tether.
+Press **Ctrl+S** after copying the packet, opening the core, breaching the database, or finishing the upload to save that milestone. Decoding the credentials still saves automatically. The checkpoint records completed objectives. An upload in progress resumes from the database breach if that milestone was saved.
 
-Relaunching resumes from the saved credential checkpoint with starting gear, starting credits and the decode salvage reward. The credential decode is the only save point. Press **R** during gameplay or confirm **Restart Run** in the pause menu to clear the checkpoint and begin again.
+Capture restores your saved objective and preserves gear, upgrades, and credits. After decoding, you return to Storage 07, where the sheltered room protects you from Hunter contact. Relaunching restores the mission checkpoint with starting inventory and credits, plus the decode salvage reward if earned. Press **R** or confirm **Restart Run** to clear the checkpoint.
 
 ### Terminal minigames
 
@@ -76,7 +80,8 @@ Cipher Recovery uses Wordle-style clues on each submitted tile. **Green** means 
 | Left mouse | Use the selected gadget |
 | 1 / 2 / 3, mouse wheel | Select Jammer Dart / EMP Charge / Decoy Codex |
 | Tab | Toggle the objective log |
-| R | Restart Run (clears the credential checkpoint) |
+| Ctrl+S | Save the latest completed mission objective |
+| R | Restart Run (clears the mission checkpoint) |
 | Esc | Pause or resume play. Disconnect from a terminal or leave the workbench when one is open |
 
 Open **Esc → Controls** to check the current bindings for gameplay, terminal minigames, and the workbench. **Esc → Operators** lets you inspect the Runner, Hunter, Civilian, and Technician in 3D. Drag the model to rotate it, or use the left and right arrows while the preview has focus.

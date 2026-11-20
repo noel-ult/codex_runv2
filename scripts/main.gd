@@ -45,6 +45,9 @@ func _ready() -> void:
 	_hud.bind_player(_player)
 	_hud.bind_director(_director)
 	_hud.bind_mission(_mission)
+	_mission.mission_completed.connect(func(_elapsed: float, _captures: int) -> void:
+		if _mission.demo_upload:
+			_hud.show_demo_ending_label())
 	_pause.can_pause = func() -> bool: return not _terminal.is_open and not _prep.is_open and not _shop.is_open and not _rest_in_progress
 	_pause.restart_requested.connect(_restart_run)
 	_pause.graphics_preset_changed.connect(_save_graphics_preset)
@@ -55,7 +58,9 @@ func _ready() -> void:
 	_director.bind_codex(codex)
 	_director.runner_is_sheltered = _city.hideout.protects_runner.bind(_player)
 	_player.shelter_check = _director.runner_is_sheltered
-	_director.runner_caught.connect(_player.on_caught)
+	_director.runner_caught.connect(func() -> void:
+		if not _mission.demo_upload:
+			_player.on_caught())
 	_player.captured.connect(_director.on_runner_respawned)
 	_director.spawn_hunters(_city.hunter_spawn_points, _city.patrol_points)
 
@@ -97,6 +102,19 @@ func _ready() -> void:
 	_time.phase_changed.connect(_on_phase_changed)
 	_weather.weather_changed.connect(_on_weather_changed)
 	_on_phase_changed(_time.phase)
+	var intro := IntroCutscene.new()
+	add_child(intro)
+	_player.input_enabled = false
+	_hud.hide()
+	get_tree().paused = true
+	intro.finished.connect(_finish_intro.bind(intro), CONNECT_ONE_SHOT)
+	intro.play()
+
+
+func _finish_intro(intro: IntroCutscene) -> void:
+	intro.queue_free()
+	get_tree().paused = false
+	_refresh_modal_input()
 	_mission.start()
 
 
@@ -142,7 +160,7 @@ func _setup_services() -> void:
 
 
 func _refresh_modal_input() -> void:
-	_player.input_enabled = not _terminal.is_open and not _prep.is_open and not _shop.is_open and not _rest_in_progress and not _mission.completed
+	_player.input_enabled = not _terminal.is_open and not _prep.is_open and not _shop.is_open and not _rest_in_progress and not _mission.completed and not _mission.demo_upload
 	_hud.visible = not _prep.is_open and not _shop.is_open
 
 
@@ -237,6 +255,16 @@ func _wait_until_morning() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"restart_slice"):
 		_restart_run()
+		return
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.ctrl_pressed and key.physical_keycode == KEY_S:
+		get_viewport().set_input_as_handled()
+		_mission.save_checkpoint()
+		return
+	if key != null and key.pressed and not key.echo and key.ctrl_pressed and key.shift_pressed and key.physical_keycode == KEY_F10:
+		if _player.input_enabled and not _player.is_driving():
+			get_viewport().set_input_as_handled()
+			_mission.start_demo_upload()
 
 
 func _restart_run() -> void:

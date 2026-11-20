@@ -203,6 +203,12 @@ func teleport(target: Vector3) -> void:
 	velocity = Vector3.ZERO
 
 
+func face_camera_toward(target: Vector3) -> void:
+	var direction: Vector3 = target - global_position
+	_camera_pivot.rotation.y = atan2(-direction.x, -direction.z) - global_rotation.y
+	_spring_arm.rotation.x = -0.15
+
+
 # --- Disguise ------------------------------------------------------------------------
 
 ## Takes on a cloned NPC appearance. `staff` grants facility access (gate, loading bay).

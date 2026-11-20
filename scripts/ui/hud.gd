@@ -433,9 +433,13 @@ func _on_transmission_progress(progress: float, in_range: bool) -> void:
 	_meter_fill.bg_color = GREEN if in_range else RED
 
 
+func show_demo_ending_label() -> void:
+	_win_stats.text = "JUDGING DEMO\n\nR  ·  run it again"
+
+
 func _on_mission_completed(elapsed_seconds: float, captures: int) -> void:
 	_win_overlay.visible = true
-	_win_stats.text = "%s   ·   %d captures\n\nR  ·  run it again" % [_format_time(elapsed_seconds), captures]
+	_win_stats.text = "%s   ·   %d captures\n\nCtrl+S  ·  save completion\nR  ·  run it again" % [_format_time(elapsed_seconds), captures]
 	_win_overlay.modulate.a = 0.0
 	create_tween().tween_property(_win_overlay, "modulate:a", 1.0, 1.4)
 
