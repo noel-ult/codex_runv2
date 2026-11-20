@@ -107,6 +107,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _can_see(target: Vector3) -> bool:
+	if _runner.has_method(&"is_disguise_convincing") and bool(_runner.call(&"is_disguise_convincing")):
+		return false
 	var origin: Vector3 = _head.global_position
 	var to_target: Vector3 = target - origin
 	if to_target.length() > view_range:

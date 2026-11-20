@@ -60,7 +60,7 @@ func setup(player: PlayerController, compound: FacilityCompound, stations: Array
 		station.interactable.completed.connect(_on_station_used)
 
 	_compound.hack_completed.connect(func(label: String, cost: float) -> void: _codex.add_resonance(cost, label))
-	_compound.device_collected.connect(_on_device_collected)
+	_compound.database_terminal_used.connect(func(_actor: Node3D) -> void: _on_device_collected())
 	_compound.intruder_spotted.connect(_on_cctv_spotted)
 	_compound.entered_via_hatch.connect(func() -> void: radio_message.emit("You drop into the vault through the roof hatch."))
 	return _genuine
@@ -93,7 +93,6 @@ func on_runner_captured(_total: int) -> void:
 		carrying = false
 		_player.set_carrying_device(false)
 		_codex.decay_scale = 1.0
-		_compound.reset_device()
 		radio_message.emit("The Hunters recovered the Uplink Key. It's back in the vault.")
 	_publish()
 

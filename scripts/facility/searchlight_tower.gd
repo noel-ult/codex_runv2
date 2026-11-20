@@ -78,6 +78,9 @@ func _physics_process(delta: float) -> void:
 	if _runner == null or not is_instance_valid(_runner):
 		_runner = get_tree().get_first_node_in_group(&"runner") as Node3D
 		return
+	if _runner.has_method(&"is_disguise_convincing") and bool(_runner.call(&"is_disguise_convincing")):
+		_detect = 0.0
+		return
 	var offset: Vector3 = _runner.global_position - target
 	var lit: bool = Vector2(offset.x, offset.z).length() <= beam_radius and _line_of_sight(_runner.global_position + Vector3(0.0, 1.0, 0.0))
 	_detect = clampf(_detect + (delta / detect_time if lit else -delta), 0.0, 1.2)

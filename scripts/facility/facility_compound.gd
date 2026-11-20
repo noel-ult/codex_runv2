@@ -1,19 +1,19 @@
 class_name FacilityCompound
 extends Node3D
-## Guarded research compound that holds the Codex Uplink Key (the Device).
+## Meridian Signal Labs - the Hunters' regional node. Its shielded server room holds the
+## Main Hunter Database, the only source of the live uplink relay's location and cipher.
 ##
-## Ways in:
-##   1. South vehicle gate - opens only for Hunters; slip through behind one.
-##   2. West side door     - hold E at the panel to hack it (Resonance spike).
-##   3. Over the wall / onto the 10 m roof - Full Form + Super Jump, then the roof hatch.
-## Inside: yard with cover, a searchlight tower, CCTV, a loading-bay hall and a vault
-## (hack the vault console, or drop in through the hatch) with the Device on a pedestal.
+## Perimeter: south vehicle gate (opens for Hunters and staff), west service door (hack),
+## or over the wall / onto the 10 m roof (Full Form + Super Jump) and down the roof hatch.
+## Building: loading-bay shutter (staff ID or hack), laser grids, sentry turrets, CCTV.
+## Server room: HunterNet-credential door, Faraday-shielded (a Dead Zone), database terminal.
 ## The compound never references Hunters; it only emits signals.
 
 signal intruder_spotted(world_position: Vector3)
 signal hack_completed(label: String, resonance_cost: float)
-signal device_collected()
 signal entered_via_hatch()
+signal database_terminal_used(actor: Node3D)
+signal server_door_opened()
 
 const HALF: float = 20.6
 const WALL_HEIGHT: float = 6.0
@@ -22,22 +22,25 @@ const BUILDING_MIN: Vector2 = Vector2(-11.0, -15.0)
 const BUILDING_MAX: Vector2 = Vector2(13.0, 3.0)
 const BUILDING_HEIGHT: float = 10.0
 const SKIN: float = 0.5
-const VAULT_WALL_Z: float = -6.0
-const DEVICE_LOCAL: Vector3 = Vector3(7.0, 0.0, -11.0)
-const HATCH_LOCAL: Vector3 = Vector3(-7.0, 0.0, -11.0)
+const SERVER_WALL_Z: float = -6.0
+const TERMINAL_LOCAL: Vector3 = Vector3(-8.2, 0.0, -10.5)
+const HATCH_LOCAL: Vector3 = Vector3(-7.0, 0.0, -2.0)
 
 @export var side_door_resonance: float = 30.0
-@export var vault_resonance: float = 25.0
+@export var bay_resonance: float = 20.0
 
 var gate: AutoGate
 var side_door: SlidingDoor
-var vault_door: SlidingDoor
-var device_interactable: Interactable
+var bay_shutter: AutoGate
+var server_door: SlidingDoor
+var server_door_panel: Interactable
+var database_terminal: Interactable
+var dead_zones: Array[DeadZone] = []
 
-var _device_visual: Node3D
-var _device_spin: Node3D
+var _terminal_screen: StandardMaterial3D
 var _time: float = 0.0
 var _rng := RandomNumberGenerator.new()
+var _rack_leds: Array[StandardMaterial3D] = []
 
 
 func _ready() -> void:
@@ -45,7 +48,7 @@ func _ready() -> void:
 	_build_ground()
 	_build_perimeter()
 	_build_building()
-	_build_vault()
+	_build_server_room()
 	_build_yard()
 	_build_security()
 	_build_signage()
@@ -53,9 +56,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
-	if _device_spin != null and _device_visual.visible:
-		_device_spin.rotation.y = _time * 0.8
-		_device_spin.position.y = 1.45 + sin(_time * 2.0) * 0.04
+	for i: int in _rack_leds.size():
+		_rack_leds[i].emission_energy_multiplier = 1.0 + 3.0 * float(int(_time * (3.0 + i)) % 2)
+	if _terminal_screen != null:
+		_terminal_screen.emission_energy_multiplier = 1.6 + 0.3 * sin(_time * 7.0)
 
 
 ## World-space waypoints for hunter patrols inside the compound.
@@ -66,18 +70,14 @@ func get_patrol_points() -> Array[Vector3]:
 	return points
 
 
-func get_device_position() -> Vector3:
-	return to_global(DEVICE_LOCAL + Vector3(0.0, 1.4, 0.0))
+func get_database_position() -> Vector3:
+	return to_global(TERMINAL_LOCAL + Vector3(0.0, 1.4, 0.0))
 
 
 func get_entrance_position() -> Vector3:
 	return to_global(Vector3(0.0, 0.0, HALF + 2.0))
 
 
-## Returns the Device to its pedestal (after the Runner is captured while carrying it).
-func reset_device() -> void:
-	_device_visual.visible = true
-	device_interactable.enabled = true
 
 
 # --- Ground & perimeter --------------------------------------------------------------
@@ -182,7 +182,7 @@ func _build_keypad(parent: Node3D) -> void:
 	GeometryKit.mesh_box(parent, Vector3(-0.045, -0.08, 0.0), Vector3(0.01, 0.14, 0.2), MaterialLibrary.emissive(Color(1.0, 0.25, 0.15), 1.5))
 
 
-# --- Main building + vault -------------------------------------------------------------
+# --- Main building + server room -------------------------------------------------------------
 
 func _build_building() -> void:
 	var clad := MaterialLibrary.metal_panel()
@@ -215,9 +215,27 @@ func _build_building() -> void:
 	var floor_mat := MaterialLibrary.surface(Color(0.33, 0.34, 0.34), 0.35, 0.0, 0.4, 0.6)
 	GeometryKit.mesh_box(self, Vector3(cx, 0.11, cz), Vector3(width - 0.4, 0.02, depth - 0.4), floor_mat)
 
-	# Rolling shutter (half open) + bay lights + hazard frame.
-	var shutter := GeometryKit.mesh_box(self, Vector3((bay_min + bay_max) * 0.5, 3.9, max_z + 0.05), Vector3(bay_max - bay_min, 1.2, 0.1), MaterialLibrary.metal_panel())
-	shutter.set_instance_shader_parameter(&"paint_color", Color(0.45, 0.46, 0.44))
+	# Staff-access roller shutter (opens for Hunters / staff ID) + override panel.
+	bay_shutter = AutoGate.new()
+	bay_shutter.name = "BayShutter"
+	bay_shutter.size = Vector3(bay_max - bay_min, 4.5, 0.15)
+	bay_shutter.slide = Vector3(0.0, 4.4, 0.0)
+	bay_shutter.paint = Color(0.45, 0.46, 0.44)
+	bay_shutter.collision_layer = GeometryKit.DOOR_LAYER
+	bay_shutter.trigger_size = Vector3(6.0, 4.0, 6.0)
+	bay_shutter.position = Vector3((bay_min + bay_max) * 0.5, 2.25, max_z + 0.2)
+	add_child(bay_shutter)
+	var bay_panel := Interactable.new()
+	bay_panel.name = "BayPanel"
+	bay_panel.prompt = "Override the loading-bay shutter (+%d Resonance)" % int(bay_resonance)
+	bay_panel.hold_time = 3.0
+	bay_panel.radius = 1.8
+	bay_panel.position = Vector3(bay_max + 0.8, 1.3, max_z + 0.35)
+	add_child(bay_panel)
+	_build_keypad(bay_panel)
+	bay_panel.completed.connect(func(_i: Interactable, _actor: Node3D) -> void:
+		bay_shutter.access_groups = PackedStringArray(["hunters", "facility_staff", "runner"])
+		hack_completed.emit("Loading bay overridden", bay_resonance))
 	for x: float in [bay_min - 0.15, bay_max + 0.15]:
 		var post := GeometryKit.mesh_box(self, Vector3(x, 2.25, max_z + 0.3), Vector3(0.3, 4.5, 0.3), MaterialLibrary.metal_panel())
 		post.set_instance_shader_parameter(&"hazard", 1.0)
@@ -247,6 +265,26 @@ func _build_building() -> void:
 	for local: Vector3 in [Vector3(-3.0, 0.1, -3.5), Vector3(-1.6, 0.1, -3.8), Vector3(5.0, 0.1, 0.5)]:
 		PropFactory.crate(self, local, 1.3, _rng)
 
+	# Laser grids: across the loading-bay entry and (sweeping) in front of the server door.
+	_add_laser(Vector3(-2.5, 0.1, 1.6), 0.0, 5.2, false)
+	_add_laser(Vector3(6.5, 0.1, -4.2), 0.0, 5.0, true)
+	var hall_turret := SentryTurret.new()
+	hall_turret.name = "HallSentry"
+	hall_turret.position = Vector3(1.5, 0.1, -5.1)
+	hall_turret.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+	add_child(hall_turret)
+	hall_turret.intruder_spotted.connect(_relay_spotted)
+
+
+func _add_laser(local: Vector3, yaw: float, span: float, sweeping: bool) -> void:
+	var grid := LaserTripwire.new()
+	grid.span = span
+	grid.sweep = sweeping
+	grid.position = local
+	grid.rotation_degrees = Vector3(0.0, yaw, 0.0)
+	add_child(grid)
+	grid.tripped.connect(_relay_spotted)
+
 
 func _build_rack(base: Vector3) -> void:
 	var steel := MaterialLibrary.coated(Color(0.15, 0.25, 0.45), 0.7, 0.4)
@@ -262,98 +300,97 @@ func _build_rack(base: Vector3) -> void:
 				PropFactory.crate(self, base + Vector3(0.0, y + 0.03, z), 0.9, _rng)
 
 
-func _build_vault() -> void:
+func _build_server_room() -> void:
 	var clad := MaterialLibrary.metal_panel()
 	var tint := Color(0.22, 0.24, 0.26)
 	var h: float = BUILDING_HEIGHT
 	var door_min: float = 5.0
 	var door_max: float = 8.0
-	var z: float = VAULT_WALL_Z
+	var z: float = SERVER_WALL_Z
 	var parts: Array[MeshInstance3D] = []
 	parts.append(GeometryKit.solid_box(self, Vector3((BUILDING_MIN.x + door_min) * 0.5, h * 0.5, z), Vector3(door_min - BUILDING_MIN.x, h, 0.6), clad))
 	parts.append(GeometryKit.solid_box(self, Vector3((door_max + BUILDING_MAX.x) * 0.5, h * 0.5, z), Vector3(BUILDING_MAX.x - door_max, h, 0.6), clad))
 	parts.append(GeometryKit.solid_box(self, Vector3((door_min + door_max) * 0.5, (3.5 + h) * 0.5, z), Vector3(door_max - door_min, h - 3.5, 0.6), clad))
 	for part: MeshInstance3D in parts:
 		part.set_instance_shader_parameter(&"paint_color", tint)
+	var label := Label3D.new()
+	label.double_sided = false
+	label.text = "HUNTERNET CORE  //  CREDENTIALS REQUIRED"
+	label.font_size = 40
+	label.pixel_size = 0.01
+	label.modulate = Color(1.0, 0.35, 0.25)
+	label.position = Vector3((door_min + door_max) * 0.5, 4.0, z + 0.32)
+	add_child(label)
 
-	vault_door = SlidingDoor.new()
-	vault_door.name = "VaultDoor"
-	vault_door.size = Vector3(door_max - door_min, 3.5, 0.5)
-	vault_door.slide = Vector3(door_max - door_min + 0.1, 0.0, 0.0)
-	vault_door.hazard_stripes = true
-	vault_door.open_time = 2.5
-	vault_door.position = Vector3((door_min + door_max) * 0.5, 1.75, z + 0.6)
-	add_child(vault_door)
+	server_door = SlidingDoor.new()
+	server_door.name = "ServerDoor"
+	server_door.size = Vector3(door_max - door_min, 3.5, 0.5)
+	server_door.slide = Vector3(door_max - door_min + 0.1, 0.0, 0.0)
+	server_door.hazard_stripes = true
+	server_door.open_time = 2.0
+	server_door.position = Vector3((door_min + door_max) * 0.5, 1.75, z + 0.6)
+	add_child(server_door)
 
-	var console := Interactable.new()
-	console.name = "VaultConsole"
-	console.prompt = "Override the vault lock (+%d Resonance)" % int(vault_resonance)
-	console.hold_time = 4.0
-	console.radius = 2.0
-	console.one_shot = true
-	console.position = Vector3(3.6, 0.0, z + 0.9)
-	add_child(console)
-	var desk := MaterialLibrary.coated(Color(0.12, 0.12, 0.13), 0.5, 0.4)
-	GeometryKit.solid_box(console, Vector3(0.0, 0.5, 0.0), Vector3(1.0, 1.0, 0.6), desk)
-	GeometryKit.tilted_box(console, Vector3(0.0, 1.25, -0.05), Vector3(0.8, 0.5, 0.04), Vector3(-20.0, 0.0, 0.0), MaterialLibrary.emissive(Color(0.25, 0.75, 1.0), 2.0))
-	console.completed.connect(func(_i: Interactable, _actor: Node3D) -> void:
-		vault_door.open()
-		hack_completed.emit("Vault override", vault_resonance))
+	server_door_panel = Interactable.new()
+	server_door_panel.name = "ServerDoorPanel"
+	server_door_panel.prompt = "Authenticate with stolen HunterNet credentials"
+	server_door_panel.hold_time = 1.5
+	server_door_panel.radius = 1.8
+	server_door_panel.one_shot = true
+	server_door_panel.position = Vector3(door_min - 0.6, 1.3, z + 0.35)
+	add_child(server_door_panel)
+	_build_keypad(server_door_panel)
+	server_door_panel.completed.connect(func(_i: Interactable, _actor: Node3D) -> void:
+		server_door.open()
+		server_door_opened.emit())
 
-	# Vault interior: red security lighting + pedestal with the Device.
-	var red := OmniLight3D.new()
-	red.light_color = Color(1.0, 0.25, 0.2)
-	red.light_energy = 1.4
-	red.omni_range = 12.0
-	red.position = Vector3(1.0, h - 2.0, -11.0)
-	add_child(red)
-	GeometryKit.mesh_box(self, Vector3(1.0, h - 0.3, -11.0), Vector3(10.0, 0.08, 0.3), MaterialLibrary.emissive(Color(1.0, 0.2, 0.15), 2.0))
+	# Server racks in two rows with an aisle; Faraday shielding makes the room a Dead Zone.
+	var rack_body := MaterialLibrary.coated(Color(0.06, 0.065, 0.075), 0.6, 0.35)
+	for row_z: float in [-8.4, -12.6]:
+		for i: int in 7:
+			var x: float = -5.5 + i * 2.4
+			GeometryKit.solid_box(self, Vector3(x, 1.2, row_z), Vector3(1.9, 2.4, 1.1), rack_body)
+			for led: int in 4:
+				var color: Color = Color(0.2, 1.0, 0.45) if (i + led) % 3 != 0 else Color(0.25, 0.6, 1.0)
+				var material := MaterialLibrary.emissive(color, 2.0, false)
+				_rack_leds.append(material)
+				var face: float = 0.56 if row_z > -10.5 else -0.56
+				GeometryKit.mesh_box(self, Vector3(x - 0.6 + led * 0.4, 0.5 + led * 0.45, row_z - face), Vector3(0.25, 0.04, 0.01), material)
+	_add_laser(Vector3(4.0, 0.1, -10.5), 90.0, 3.2, false)
+	for x: float in [-4.0, 4.0]:
+		var cold := OmniLight3D.new()
+		cold.light_color = Color(0.4, 0.75, 1.0)
+		cold.light_energy = 1.2
+		cold.omni_range = 9.0
+		cold.position = Vector3(x, h - 2.5, -10.5)
+		add_child(cold)
+	GeometryKit.mesh_box(self, Vector3(1.0, h - 0.3, -10.5), Vector3(16.0, 0.08, 0.3), MaterialLibrary.emissive(Color(0.45, 0.75, 1.0), 2.5))
+	var shield := DeadZone.new()
+	shield.name = "DeadZone_HUNTERNET_CORE"
+	shield.zone_name = "FARADAY SHIELD"
+	shield.size = Vector3(23.0, 6.0, 8.4)
+	shield.position = Vector3(1.0, 3.0, -10.5)
+	add_child(shield)
+	dead_zones.append(shield)
 
-	var pedestal_mat := MaterialLibrary.coated(Color(0.15, 0.15, 0.17), 0.8, 0.3)
-	GeometryKit.cylinder(self, DEVICE_LOCAL + Vector3(0.0, 0.5, 0.0), 0.45, 0.6, 1.0, pedestal_mat, 24)
-	GeometryKit.collider_box(self, DEVICE_LOCAL + Vector3(0.0, 0.5, 0.0), Vector3(1.0, 1.0, 1.0))
-	GeometryKit.cylinder(self, DEVICE_LOCAL + Vector3(0.0, 1.01, 0.0), 0.42, 0.42, 0.02, MaterialLibrary.emissive(Color(1.0, 0.75, 0.25), 2.0), 24)
-	var beam := GeometryKit.cylinder(self, DEVICE_LOCAL + Vector3(0.0, 3.0, 0.0), 0.35, 0.35, 4.0, MaterialLibrary.hologram(Color(1.0, 0.75, 0.3), 0.08), 20)
-	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Database terminal at the end of the aisle.
+	database_terminal = Interactable.new()
+	database_terminal.name = "DatabaseTerminal"
+	database_terminal.prompt = "Breach the Main Hunter Database"
+	database_terminal.hold_time = 0.6
+	database_terminal.radius = 2.0
+	database_terminal.position = TERMINAL_LOCAL
+	add_child(database_terminal)
+	var desk := MaterialLibrary.coated(Color(0.1, 0.1, 0.11), 0.5, 0.4)
+	GeometryKit.solid_box(database_terminal, Vector3(0.0, 0.5, 0.0), Vector3(0.7, 1.0, 1.4), desk)
+	_terminal_screen = MaterialLibrary.emissive(Color(0.25, 1.0, 0.45), 1.6, false)
+	GeometryKit.tilted_box(database_terminal, Vector3(0.1, 1.35, 0.0), Vector3(0.04, 0.6, 1.0), Vector3(0.0, 0.0, -12.0), _terminal_screen)
+	GeometryKit.mesh_box(database_terminal, Vector3(0.25, 1.02, 0.0), Vector3(0.3, 0.03, 0.8), MaterialLibrary.coated(Color(0.2, 0.2, 0.22), 0.4, 0.5))
+	database_terminal.completed.connect(func(_i: Interactable, actor: Node3D) -> void: database_terminal_used.emit(actor))
 
-	_device_visual = Node3D.new()
-	_device_visual.position = DEVICE_LOCAL
-	add_child(_device_visual)
-	_device_spin = Node3D.new()
-	_device_spin.position = Vector3(0.0, 1.45, 0.0)
-	_device_visual.add_child(_device_spin)
-	GeometryKit.mesh_box(_device_spin, Vector3.ZERO, Vector3(0.32, 0.32, 0.32), MaterialLibrary.coated(Color(0.75, 0.6, 0.22), 0.95, 0.2))
-	GeometryKit.mesh_box(_device_spin, Vector3.ZERO, Vector3(0.34, 0.08, 0.34), MaterialLibrary.emissive(Color(1.0, 0.75, 0.25), 5.0))
-	var ring := MeshInstance3D.new()
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.32
-	torus.outer_radius = 0.36
-	ring.mesh = torus
-	ring.material_override = MaterialLibrary.emissive(Color(1.0, 0.8, 0.35), 4.0)
-	ring.rotation_degrees = Vector3(70.0, 0.0, 0.0)
-	_device_spin.add_child(ring)
-	var glow := OmniLight3D.new()
-	glow.light_color = Color(1.0, 0.75, 0.3)
-	glow.light_energy = 2.0
-	glow.omni_range = 5.0
-	_device_spin.add_child(glow)
-
-	device_interactable = Interactable.new()
-	device_interactable.name = "DeviceInteractable"
-	device_interactable.prompt = "Take the Codex Uplink Key"
-	device_interactable.hold_time = 1.5
-	device_interactable.radius = 2.2
-	device_interactable.position = DEVICE_LOCAL + Vector3(0.0, 0.2, 0.0)
-	add_child(device_interactable)
-	device_interactable.completed.connect(func(_i: Interactable, _actor: Node3D) -> void:
-		_device_visual.visible = false
-		device_interactable.enabled = false
-		device_collected.emit())
-
-	# Roof hatch: from the roof, drop straight into the vault room.
+	# Roof hatch: from the roof, drop into the loading-bay hall.
 	var hatch_top: Vector3 = HATCH_LOCAL + Vector3(0.0, BUILDING_HEIGHT + 0.4, 0.0)
-	var hatch_mat := MaterialLibrary.metal_panel()
-	var hatch := GeometryKit.mesh_box(self, hatch_top + Vector3(0.0, 0.15, 0.0), Vector3(1.6, 0.3, 1.6), hatch_mat)
+	var hatch := GeometryKit.mesh_box(self, hatch_top + Vector3(0.0, 0.15, 0.0), Vector3(1.6, 0.3, 1.6), MaterialLibrary.metal_panel())
 	hatch.set_instance_shader_parameter(&"hazard", 1.0)
 	GeometryKit.mesh_box(self, hatch_top + Vector3(0.0, 0.31, 0.0), Vector3(1.2, 0.04, 1.2), MaterialLibrary.coated(Color(0.2, 0.22, 0.24), 0.8, 0.4))
 	var hatch_use := Interactable.new()
@@ -379,6 +416,12 @@ func _build_yard() -> void:
 	PropFactory.shipping_container(self, Vector3(13.0, 0.1, 10.5), 0.0, Color(0.6, 0.55, 0.5))
 	PropFactory.jersey_barrier(self, Vector3(-5.5, 0.1, 17.0), 90.0)
 	PropFactory.jersey_barrier(self, Vector3(5.5, 0.1, 17.0), 90.0)
+	var yard_turret := SentryTurret.new()
+	yard_turret.name = "YardSentry"
+	yard_turret.position = Vector3(-7.5, 0.1, 6.5)
+	yard_turret.rotation_degrees = Vector3(0.0, 160.0, 0.0)
+	add_child(yard_turret)
+	yard_turret.intruder_spotted.connect(_relay_spotted)
 	for local: Vector3 in [Vector3(6.0, 0.1, 6.0), Vector3(7.4, 0.1, 6.3), Vector3(-6.0, 0.1, 6.5)]:
 		PropFactory.crate(self, local, 1.2, _rng)
 

@@ -131,6 +131,7 @@ toggle_objectives={
 3d_physics/layer_5="triggers"
 3d_physics/layer_6="doors"
 3d_physics/layer_7="electronics"
+3d_physics/layer_8="npcs"
 
 [physics]
 

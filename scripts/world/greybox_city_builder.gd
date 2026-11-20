@@ -267,6 +267,7 @@ func _build_facility() -> void:
 	facility.name = "MeridianSignalLabs"
 	facility.position = _block_center(1, -1)
 	add_child(facility)
+	dead_zones.append_array(facility.dead_zones)
 
 
 func _build_tunnel() -> void:
