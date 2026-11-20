@@ -24,6 +24,7 @@ static func street_lamp(parent: Node3D, base: Vector3, facing_yaw_degrees: float
 	light.light_volumetric_fog_energy = 1.5
 	light.position = Vector3(0.0, 5.85, -1.5)
 	light.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	light.add_to_group(&"street_lights")
 	root.add_child(light)
 
 

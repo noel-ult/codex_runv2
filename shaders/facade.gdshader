@@ -19,6 +19,8 @@ uniform float floor_height = 3.4;
 uniform float ground_floor_height = 4.2;
 uniform float window_spacing = 2.7;
 uniform float window_energy = 1.3;
+// 1 = night, 0 = full daylight (driven by TimeOfDay).
+global uniform float night_factor;
 
 varying vec3 v_wpos;
 varying vec3 v_wnrm;
@@ -139,7 +141,7 @@ void fragment() {
 				albedo = mix(vec3(0.02, 0.025, 0.03), vec3(0.08), mull);
 				rough = mix(0.04, 0.5, mull);
 				metal = 0.3;
-				emission = interior * depth * displays * lit * 0.42 * (1.0 - mull);
+				emission = interior * depth * displays * lit * 0.42 * (1.0 - mull) * mix(0.45, 1.0, night_factor);
 				grad = vec2(0.0);
 			} else if (!pillar && h >= 3.1 && h < 3.85) {
 				// Sign band: backlit lightbox with pixel-font lettering on some shops.
@@ -157,7 +159,7 @@ void fragment() {
 				vec3 box = mix(vec3(0.9), sign_col, 0.75) * (0.8 + 0.2 * sy);
 				albedo = vec3(0.06, 0.06, 0.065);
 				rough = 0.4;
-				emission = mix(box * 0.8, sign_col * 0.1, on * in_text) * border * lit_sign;
+				emission = mix(box * 0.8, sign_col * 0.1, on * in_text) * border * lit_sign * mix(0.3, 1.0, night_factor);
 				grad = vec2(0.0);
 			} else if (!pillar && h <= 0.3) {
 				albedo = vec3(0.06);
@@ -194,7 +196,7 @@ void fragment() {
 					grad = vec2(0.0);
 				} else {
 					float r = hash13(id);
-					float lit = step(r, lit_ratio);
+					float lit = step(r, lit_ratio * mix(0.18, 1.0, night_factor));
 					vec3 warm = vec3(1.0, 0.76, 0.48);
 					vec3 cool = vec3(0.62, 0.8, 1.0);
 					vec3 tint = mix(warm, cool, step(0.72, hash13(id + 4.1)));
@@ -206,7 +208,7 @@ void fragment() {
 					albedo = vec3(0.025, 0.03, 0.036);
 					rough = 0.05;
 					metal = 0.4;
-					emission = tint * bright * ceiling * blinds * half_shade * room * lit * window_energy;
+					emission = tint * bright * ceiling * blinds * half_shade * room * lit * window_energy * mix(0.35, 1.0, night_factor);
 					grad = vec2(0.0);
 				}
 			} else if (style < 1.5 && fu > w0 - 0.02 && fu < w1 + 0.02 && fv > v0 - 0.07 && fv <= v0) {

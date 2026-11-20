@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/world/greybox_city_builder.gd" id="2_city"]
@@ -9,6 +9,8 @@
 [ext_resource type="Script" path="res://scripts/mission/mission_director.gd" id="7_mission"]
 [ext_resource type="Script" path="res://scripts/hacking/hack_terminal.gd" id="8_terminal"]
 [ext_resource type="Script" path="res://scripts/world/rain_weather.gd" id="9_rain"]
+[ext_resource type="Script" path="res://scripts/world/time_of_day.gd" id="10_time"]
+[ext_resource type="Script" path="res://scripts/world/weather_system.gd" id="11_weather"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_night"]
 sky_top_color = Color(0.03, 0.04, 0.08, 1)
@@ -84,6 +86,12 @@ script = ExtResource("2_city")
 
 [node name="Rain" type="Node3D" parent="."]
 script = ExtResource("9_rain")
+
+[node name="Weather" type="Node" parent="."]
+script = ExtResource("11_weather")
+
+[node name="TimeOfDay" type="Node" parent="."]
+script = ExtResource("10_time")
 
 [node name="Echoes" type="Node3D" parent="."]
 

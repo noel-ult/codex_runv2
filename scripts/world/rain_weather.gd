@@ -9,6 +9,8 @@ extends Node3D
 @export var fall_speed: float = 24.0
 
 var _rain: GPUParticles3D
+var _material: StandardMaterial3D
+var _intensity: float = 1.0
 
 
 func _ready() -> void:
@@ -31,6 +33,7 @@ func _ready() -> void:
 	var streak := QuadMesh.new()
 	streak.size = Vector2(0.012, 0.55)
 	var material := StandardMaterial3D.new()
+	_material = material
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.albedo_color = Color(0.75, 0.8, 0.9, 0.22)
@@ -40,6 +43,16 @@ func _ready() -> void:
 	_rain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_rain)
 
+
+
+## 0 = dry, 1 = downpour. Driven by WeatherSystem.
+func set_intensity(value: float) -> void:
+	_intensity = clampf(value, 0.0, 1.0)
+	if _rain == null:
+		return
+	_rain.amount_ratio = maxf(_intensity, 0.001)
+	_rain.emitting = _intensity > 0.02
+	_material.albedo_color.a = lerpf(0.12, 0.3, _intensity)
 
 
 func _process(_delta: float) -> void:

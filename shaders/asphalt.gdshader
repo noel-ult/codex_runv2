@@ -6,7 +6,8 @@ render_mode diffuse_burley, specular_schlick_ggx;
 
 #include "res://shaders/common.gdshaderinc"
 
-uniform float wetness : hint_range(0.0, 1.0) = 0.6;
+// 0 = bone dry, 1 = soaked (driven by WeatherSystem).
+global uniform float wetness;
 uniform vec4 base_color : source_color = vec4(0.07, 0.072, 0.078, 1.0);
 
 varying vec3 v_wpos;
@@ -29,7 +30,7 @@ void fragment() {
 	col *= 1.0 - 0.6 * crack;
 
 	float puddle_field = fbm5(p * 0.09 + 5.3);
-	float puddle = smoothstep(0.6 - wetness * 0.12, 0.64 - wetness * 0.12, puddle_field);
+	float puddle = smoothstep(0.6 - wetness * 0.12, 0.64 - wetness * 0.12, puddle_field) * smoothstep(0.1, 0.5, wetness);
 	float damp = smoothstep(0.42, 0.62, puddle_field) * wetness;
 
 	ALBEDO = mix(col, col * 0.45, max(puddle, damp * 0.5));

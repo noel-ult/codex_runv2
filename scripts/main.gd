@@ -14,10 +14,15 @@ extends Node3D
 @onready var _mission: MissionDirector = $MissionDirector
 @onready var _hud: HUD = $HUD
 @onready var _terminal: HackTerminal = $HackTerminal
+@onready var _time: TimeOfDay = $TimeOfDay
+@onready var _weather: WeatherSystem = $Weather
 @onready var _echoes: Node3D = $Echoes
 
 
 func _ready() -> void:
+	WorldConditions.reset()
+	_weather.setup($Rain as RainWeather)
+	_time.setup($WorldEnvironment as WorldEnvironment, $Moon as DirectionalLight3D, _weather)
 	var codex: CodexSignalSystem = _player.get_codex()
 	codex.echo_container = _echoes
 

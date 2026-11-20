@@ -137,6 +137,17 @@ toggle_objectives={
 
 common/physics_ticks_per_second=60
 
+[shader_globals]
+
+night_factor={
+"type": "float",
+"value": 1.0
+}
+wetness={
+"type": "float",
+"value": 0.6
+}
+
 [rendering]
 
 anti_aliasing/quality/msaa_3d=1
