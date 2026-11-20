@@ -10,8 +10,15 @@ const EMP_GROUP: StringName = &"emp_receivers"
 const HITBOX_LAYER: int = 64
 
 
+const HITBOX_GROUP: StringName = &"dart_hitboxes"
+## Hitboxes are generous so darts don't need pixel-perfect aim.
+const HITBOX_SCALE: float = 1.6
+
+
 static func add_hitbox(owner_node: Node3D, local_position: Vector3, size: Vector3) -> StaticBody3D:
 	var body := StaticBody3D.new()
+	body.add_to_group(HITBOX_GROUP)
+	size *= HITBOX_SCALE
 	body.collision_layer = HITBOX_LAYER
 	body.collision_mask = 0
 	body.position = local_position
@@ -32,6 +39,42 @@ static func resolve(collider: Object, group: StringName) -> Node:
 			return node
 		node = node.get_parent()
 	return null
+
+
+## Sensor range against the Runner after weather/daylight and body profile (stance):
+## crouched halves it; prone Runners are only noticed at point-blank range.
+static func sensor_range(runner: Node, base_range: float) -> float:
+	var profile: float = 1.0
+	if runner != null and runner.has_method(&"get_stealth_profile"):
+		profile = float(runner.call(&"get_stealth_profile"))
+	if profile <= 0.0:
+		return 3.0
+	return base_range * WorldConditions.visibility * profile
+
+
+## How fast a sensor's detection meter fills against the Runner (crouching slows it).
+static func detect_rate(runner: Node) -> float:
+	if runner != null and runner.has_method(&"get_stealth_profile"):
+		var profile: float = float(runner.call(&"get_stealth_profile"))
+		return 0.35 if profile <= 0.0 else clampf(profile, 0.35, 1.0)
+	return 1.0
+
+
+## Friendly name for HUD lock-on readouts.
+static func describe(device: Node) -> String:
+	if device is SecurityCamera:
+		return "CAMERA"
+	if device is SentryTurret:
+		return "SENTRY"
+	if device is LaserTripwire:
+		return "LASER GRID"
+	if device is SearchlightTower:
+		return "SEARCHLIGHT"
+	if device is SeekerDrone:
+		return "DRONE"
+	if device.is_in_group(EMP_GROUP):
+		return "HUNTER VISOR"
+	return "DEVICE"
 
 
 static func disable_in_radius(tree: SceneTree, center: Vector3, radius: float, seconds: float) -> int:

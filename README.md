@@ -34,6 +34,8 @@ You carry the **Codex**. The only way to send it to safety is through the Hunter
 | Q | Leap from the ground |
 | Shift | **Dash** |
 | F | Toggle **Full Form** |
+| C / Ctrl | Toggle **crouch** |
+| Z | Toggle **prone** (lie down and crawl) |
 | E (hold) | Interact: suit ports, ID cloning, panels, doors, terminal, decoys, relay |
 | Left mouse | Use the selected gadget |
 | 1 / 2 / 3, mouse wheel | Select Jammer Dart / EMP Charge / Decoy Codex |
@@ -87,8 +89,8 @@ During the day, the station or the **cot** lets you **rest until dusk** (19:00).
 
 | Gadget | Effect |
 | --- | --- |
-| **Jammer Dart** | Silent hitscan from the crosshair. Takes one camera, searchlight, laser grid, sentry turret or drone offline for 20 s, or scrambles a Hunter's visor (it freezes and loses you). |
-| **EMP Charge** | Thrown. Shuts down every device within 9 m for 15 s and stuns Hunters. Loud: +15 Resonance. |
+| **Jammer Dart** | Silent hitscan from the crosshair, with aim assist that locks onto any device or Hunter within ~7° of the crosshair (generous hitboxes). Takes one camera, searchlight, laser grid, sentry turret or drone offline for 20 s, or scrambles a Hunter's visor (it freezes and loses you). |
+| **EMP Charge** | Thrown. Shuts down every device within 13 m for 15 s and stuns Hunters. Loud: +15 Resonance. |
 | **Decoy Codex** | Costs 2 **Resonance Cells** (glowing pickups in alleys, on rooftops and in Dead Zones). Place it, then hold E to **imprint** it with 30 of your own Resonance. An armed decoy takes the next Codex Release in your place and echoes your Ignition broadcast as a fake beacon. Hunters that reach it shoot it apart. Max 2 active. |
 
 Supply caches restock darts and EMPs, and all pickups respawn.
@@ -113,6 +115,18 @@ Visor/halo colour shows state: **green** PATROL, **amber** INVESTIGATE, **red** 
 | Laser tripwire grids (one sweeps) | Jam an emitter post or EMP |
 | Sentry turrets (stun bolts slow you) | Jam, EMP, or stay out of the arc |
 | HunterNet core door | Stolen HunterNet credentials |
+
+## Stances and staying low
+
+| Stance | Speed | Effect on security (cameras, turrets, searchlight, drones) |
+| --- | --- | --- |
+| Standing | normal | full sensor range |
+| **Crouched** (C) | 2.4 m/s | sensor range halved, detection fills ~2× slower |
+| **Prone** (Z) | 1.1 m/s crawl | invisible to sensors beyond ~3 m; fits under the lowest laser beam (0.6 m) |
+
+- **Getting up:** jumping, Full Form or Micro-Fusions stand you back up, and dashing is impossible while prone.
+- **Headroom:** you can't stand up under a low ceiling.
+- **Hunters:** stances only fool electronics. An alerted Hunter that bumps into you still catches you.
 
 ## NPCs and disguises
 

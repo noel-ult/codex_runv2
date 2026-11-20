@@ -7,7 +7,8 @@ extends Node3D
 signal tripped(world_position: Vector3)
 
 @export var span: float = 5.0
-@export var beam_heights: PackedFloat32Array = PackedFloat32Array([0.35, 0.9, 1.5])
+## Lowest beam sits just above a prone Runner (0.48 m) - crawl under it.
+@export var beam_heights: PackedFloat32Array = PackedFloat32Array([0.6, 1.05, 1.55])
 @export var sweep: bool = false
 @export var sweep_range: float = 1.4
 @export var sweep_speed: float = 1.1

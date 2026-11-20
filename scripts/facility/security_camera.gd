@@ -95,7 +95,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var seen: bool = _can_see(_runner.global_position + Vector3(0.0, 1.0, 0.0))
-	_detect = clampf(_detect + (delta / detect_time if seen else -delta * 0.6), 0.0, 1.2)
+	_detect = clampf(_detect + (delta / detect_time * Electronics.detect_rate(_runner) if seen else -delta * 0.6), 0.0, 1.2)
 	var alarm: bool = _detect >= 1.0
 	var color: Color = Color(1.0, 0.12, 0.08) if alarm else Color(1.0, 0.9, 0.5).lerp(Color(1.0, 0.4, 0.1), clampf(_detect, 0.0, 1.0))
 	_cone_material.albedo_color = Color(color, 0.05 + 0.12 * clampf(_detect, 0.0, 1.0))
@@ -111,7 +111,7 @@ func _can_see(target: Vector3) -> bool:
 		return false
 	var origin: Vector3 = _head.global_position
 	var to_target: Vector3 = target - origin
-	if to_target.length() > view_range * WorldConditions.visibility:
+	if to_target.length() > Electronics.sensor_range(_runner, view_range):
 		return false
 	if (-_head.global_basis.z).angle_to(to_target) > deg_to_rad(half_fov_degrees):
 		return false

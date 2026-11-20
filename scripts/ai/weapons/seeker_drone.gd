@@ -127,7 +127,7 @@ func _scan() -> void:
 	if runner.has_method(&"is_disguise_convincing") and bool(runner.call(&"is_disguise_convincing")):
 		return
 	var to_runner: Vector3 = runner.global_position + Vector3(0.0, 1.0, 0.0) - global_position
-	if to_runner.length() > hover_height * 2.2 * WorldConditions.visibility or Vector3.DOWN.angle_to(to_runner) > deg_to_rad(light_half_angle):
+	if to_runner.length() > Electronics.sensor_range(runner, hover_height * 2.2) or Vector3.DOWN.angle_to(to_runner) > deg_to_rad(light_half_angle):
 		_cone_material.albedo_color = Color(0.85, 0.9, 1.0, 0.05)
 		return
 	var query := PhysicsRayQueryParameters3D.create(global_position, runner.global_position + Vector3(0.0, 1.0, 0.0), GeometryKit.WORLD_LAYER | GeometryKit.DOOR_LAYER)

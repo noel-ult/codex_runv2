@@ -5,7 +5,7 @@ extends RigidBody3D
 
 signal detonated(at: Vector3)
 
-@export var radius: float = 9.0
+@export var radius: float = 13.0
 @export var disable_seconds: float = 15.0
 @export var stun_seconds: float = 3.5
 @export var fuse: float = 1.6

@@ -37,6 +37,8 @@ const BONE_OFFSETS: PackedVector3Array = [
 var dashing: bool = false
 var scanning: bool = false
 var crouch_amount: float = 0.0
+## 0 = upright, 1 = lying face-down (crawl cycle).
+var prone_amount: float = 0.0
 
 var _skeleton: Skeleton3D
 var _rest: PackedVector3Array = PackedVector3Array()
@@ -165,7 +167,27 @@ func animate(local_velocity: Vector3, on_floor: bool, delta: float) -> void:
 		elbow_r = 0.15
 		head_y = sin(_time * 1.6) * 0.9
 
-	var squash: float = _land_squash + crouch_amount * 0.35
+	# Prone crawl: arms reach overhead alternately, legs push, head tilts up to look ahead.
+	if prone_amount > 0.01:
+		var p: float = prone_amount
+		var crawl: float = sin(_phase * 0.8)
+		var reach: float = 0.45 * move
+		shoulder_l = lerpf(shoulder_l, 2.75 + crawl * reach, p)
+		shoulder_r = lerpf(shoulder_r, 2.75 - crawl * reach, p)
+		elbow = lerpf(elbow, 0.55 + maxf(0.0, crawl) * 0.5 * move, p)
+		elbow_r = lerpf(elbow_r, 0.55 + maxf(0.0, -crawl) * 0.5 * move, p)
+		arm_out = lerpf(arm_out, 0.35, p)
+		hip_l = lerpf(hip_l, 0.12 + maxf(0.0, crawl) * 0.35 * move, p)
+		hip_r = lerpf(hip_r, 0.12 + maxf(0.0, -crawl) * 0.35 * move, p)
+		knee_l = lerpf(knee_l, -0.15 - maxf(0.0, crawl) * 0.7 * move, p)
+		knee_r = lerpf(knee_r, -0.15 - maxf(0.0, -crawl) * 0.7 * move, p)
+		spine = lerpf(spine, 0.05, p)
+		head_y = lerpf(head_y, 0.0, p)
+		hips_y = lerpf(hips_y, 0.96, p)
+	rotation.x = lerp_angle(rotation.x, -PI * 0.5 * prone_amount, 1.0)
+	position = Vector3(0.0, 0.14 * prone_amount, 0.85 * prone_amount)
+
+	var squash: float = _land_squash + crouch_amount * 0.35 * (1.0 - prone_amount)
 	hips_y -= squash * 0.5
 	knee_l -= squash * 1.6
 	knee_r -= squash * 1.6
@@ -179,8 +201,8 @@ func animate(local_velocity: Vector3, on_floor: bool, delta: float) -> void:
 	_blend(B_HIPS, Vector3(0.0, hips_twist, lean_z), k)
 	_blend(B_SPINE, Vector3(spine, 0.0, 0.0), k)
 	_blend(B_CHEST, Vector3(breathe * 0.5, chest_twist, 0.0), k)
-	_blend(B_NECK, Vector3(-spine * 0.3, head_y * 0.4, 0.0), k)
-	_blend(B_HEAD, Vector3(-spine * 0.35, head_y * 0.6, 0.0), k)
+	_blend(B_NECK, Vector3(-spine * 0.3 + prone_amount * 0.6, head_y * 0.4, 0.0), k)
+	_blend(B_HEAD, Vector3(-spine * 0.35 + prone_amount * 0.5, head_y * 0.6, 0.0), k)
 	_blend(B_HIP_L, Vector3(hip_l, 0.0, 0.0), k)
 	_blend(B_HIP_R, Vector3(hip_r, 0.0, 0.0), k)
 	_blend(B_KNEE_L, Vector3(knee_l, 0.0, 0.0), k)

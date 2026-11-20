@@ -11,6 +11,9 @@ signal interaction_prompt_changed(text: String, progress: float)
 signal captured(total_captures: int)
 signal feedback(message: String)
 signal disguise_changed(active: bool, role: String, seconds_left: float)
+signal stance_changed(stance: int)
+
+enum Stance { STANDING, CROUCHED, PRONE }
 
 @export_group("Movement")
 @export var base_speed: float = 4.5
@@ -37,6 +40,10 @@ signal disguise_changed(active: bool, role: String, seconds_left: float)
 @export var base_fov: float = 70.0
 @export var aim_range: float = 45.0
 @export var kill_floor_y: float = -25.0
+
+@export_group("Stance")
+@export var crouch_speed: float = 2.4
+@export var prone_speed: float = 1.1
 
 @export_group("Disguise")
 @export var disguise_duration: float = 120.0
@@ -70,6 +77,8 @@ var _disguise_left: float = 0.0
 var _disguise_role: String = ""
 var _restricted_count: int = 0
 var _disguise_tick: float = 0.0
+var stance: Stance = Stance.STANDING
+var _capsule: CapsuleShape3D
 
 @onready var _codex: CodexSignalSystem = $CodexSignalSystem
 @onready var _camera_pivot: Node3D = $CameraPivot
@@ -77,6 +86,7 @@ var _disguise_tick: float = 0.0
 @onready var _camera: Camera3D = $CameraPivot/SpringArm3D/Camera3D
 @onready var _interaction_ray: RayCast3D = $CameraPivot/SpringArm3D/Camera3D/InteractionRay
 @onready var _visual: Node3D = $Visual
+@onready var _collision: CollisionShape3D = $CollisionShape3D
 @onready var _rig: HumanoidRig = $Visual/Rig
 @onready var _gadgets: GadgetBelt = $GadgetBelt
 
@@ -86,6 +96,8 @@ func _ready() -> void:
 	_spring_arm.add_excluded_object(get_rid())
 	_interaction_ray.add_exception(self)
 	_interaction_ray.target_position = Vector3(0.0, 0.0, -aim_range)
+	_capsule = (_collision.shape as CapsuleShape3D).duplicate() as CapsuleShape3D
+	_collision.shape = _capsule
 	_build_effects()
 	_codex.form_changed.connect(_on_form_changed)
 	_codex.resonance_changed.connect(_on_resonance_changed)
@@ -240,6 +252,7 @@ func on_caught() -> void:
 	_slow_left = 0.0
 	_shake = 0.6
 	_codex.reset_resonance()
+	set_stance(Stance.STANDING)
 	break_disguise("Captured")
 	captured.emit(captures)
 
@@ -270,6 +283,7 @@ func _physics_process(delta: float) -> void:
 
 	var move_direction: Vector3 = _get_move_direction() if input_enabled else Vector3.ZERO
 	if input_enabled:
+		_handle_stance()
 		_handle_form_toggle()
 		_handle_jumps()
 		_handle_micro_dash(move_direction)
@@ -299,6 +313,10 @@ func _get_move_direction() -> Vector3:
 
 func _current_speed() -> float:
 	var speed: float = full_form_speed if _codex.is_full_form() else base_speed
+	if stance == Stance.CROUCHED:
+		speed = minf(speed, crouch_speed)
+	elif stance == Stance.PRONE:
+		speed = prone_speed
 	if _tether_left > 0.0:
 		speed *= 0.45
 	if _slow_left > 0.0:
@@ -329,6 +347,9 @@ func _apply_horizontal_movement(direction: Vector3, delta: float) -> void:
 
 func _handle_jumps() -> void:
 	var wants_super: bool = Input.is_action_just_pressed(&"super_jump")
+	if stance != Stance.STANDING and (wants_super or Input.is_action_just_pressed(&"jump")):
+		set_stance(Stance.STANDING)
+		return
 	if Input.is_action_just_pressed(&"jump"):
 		if is_on_floor():
 			velocity.y = full_form_jump_velocity if _codex.is_full_form() else base_jump_velocity
@@ -346,6 +367,8 @@ func _handle_jumps() -> void:
 func _handle_micro_dash(move_direction: Vector3) -> void:
 	if not Input.is_action_just_pressed(&"micro_dash") or _dash_cooldown_left > 0.0:
 		return
+	if stance == Stance.PRONE:
+		return
 	if not _codex.try_micro_fusion(CodexSignalSystem.ABILITY_MICRO_DASH):
 		return
 	_dash_direction = move_direction.normalized()
@@ -362,7 +385,59 @@ func _handle_micro_dash(move_direction: Vector3) -> void:
 
 func _handle_form_toggle() -> void:
 	if Input.is_action_just_pressed(&"toggle_full_form"):
+		if stance != Stance.STANDING and not _codex.is_full_form():
+			set_stance(Stance.STANDING)
 		_codex.toggle_full_form()
+
+
+# --- Stance -----------------------------------------------------------------------------
+
+func _handle_stance() -> void:
+	if Input.is_action_just_pressed(&"crouch"):
+		set_stance(Stance.STANDING if stance == Stance.CROUCHED else Stance.CROUCHED)
+	elif Input.is_action_just_pressed(&"prone"):
+		set_stance(Stance.STANDING if stance == Stance.PRONE else Stance.PRONE)
+
+
+## Changes stance (crouch / prone lower your profile to security sensors).
+func set_stance(new_stance: Stance) -> void:
+	if new_stance == stance:
+		return
+	if new_stance != Stance.PRONE and stance != Stance.STANDING and not _has_headroom(new_stance):
+		feedback.emit("No room to get up here.")
+		return
+	if new_stance != Stance.STANDING and _codex.is_full_form():
+		_codex.set_full_form(false)
+	stance = new_stance
+	match stance:
+		Stance.CROUCHED:
+			_capsule.radius = 0.35
+			_capsule.height = 1.15
+		Stance.PRONE:
+			_capsule.radius = 0.24
+			_capsule.height = 0.48
+		_:
+			_capsule.radius = 0.35
+			_capsule.height = 1.8
+	_collision.position = Vector3(0.0, _capsule.height * 0.5, 0.0)
+	stance_changed.emit(int(stance))
+
+
+func _has_headroom(target: Stance) -> bool:
+	var height: float = 1.8 if target == Stance.STANDING else 1.15
+	var query := PhysicsRayQueryParameters3D.create(global_position + Vector3(0.0, 0.3, 0.0), global_position + Vector3(0.0, height + 0.05, 0.0), GeometryKit.WORLD_LAYER | GeometryKit.DOOR_LAYER, [get_rid()])
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+
+## Sensor range multiplier from body profile: 1 standing, 0.5 crouched, 0 prone
+## (prone Runners are only noticed by sensors at point-blank range).
+func get_stealth_profile() -> float:
+	match stance:
+		Stance.CROUCHED:
+			return 0.5
+		Stance.PRONE:
+			return 0.0
+	return 1.0
 
 
 func _face_movement(delta: float) -> void:
@@ -376,8 +451,16 @@ func _face_movement(delta: float) -> void:
 func _animate(delta: float) -> void:
 	var local_velocity: Vector3 = _visual.global_basis.inverse() * velocity
 	_rig.dashing = _dash_time_left > 0.0
-	_rig.crouch_amount = move_toward(_rig.crouch_amount, 1.0 if _interactable != null and _hold_time > 0.0 else 0.0, delta * 4.0)
+	var crouch_target: float = 1.0 if (_interactable != null and _hold_time > 0.0) or stance == Stance.CROUCHED else 0.0
+	_rig.crouch_amount = move_toward(_rig.crouch_amount, crouch_target, delta * 4.0)
+	_rig.prone_amount = move_toward(_rig.prone_amount, 1.0 if stance == Stance.PRONE else 0.0, delta * 4.0)
 	_rig.animate(local_velocity, is_on_floor(), delta)
+	var pivot_height: float = 1.6
+	if stance == Stance.CROUCHED:
+		pivot_height = 1.05
+	elif stance == Stance.PRONE:
+		pivot_height = 0.55
+	_camera_pivot.position.y = lerpf(_camera_pivot.position.y, pivot_height, clampf(delta * 8.0, 0.0, 1.0))
 
 	var target_fov: float = base_fov
 	if _codex.is_full_form():

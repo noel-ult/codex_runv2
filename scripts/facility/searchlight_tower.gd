@@ -82,8 +82,9 @@ func _physics_process(delta: float) -> void:
 		_detect = 0.0
 		return
 	var offset: Vector3 = _runner.global_position - target
-	var lit: bool = Vector2(offset.x, offset.z).length() <= beam_radius * clampf(WorldConditions.visibility, 0.6, 1.2) and _line_of_sight(_runner.global_position + Vector3(0.0, 1.0, 0.0))
-	_detect = clampf(_detect + (delta / detect_time if lit else -delta), 0.0, 1.2)
+	var profile_radius: float = Electronics.sensor_range(_runner, beam_radius)
+	var lit: bool = Vector2(offset.x, offset.z).length() <= minf(profile_radius, beam_radius * 1.2) * (0.35 if profile_radius <= 3.0 else 1.0) and _line_of_sight(_runner.global_position + Vector3(0.0, 1.0, 0.0))
+	_detect = clampf(_detect + (delta / detect_time * Electronics.detect_rate(_runner) if lit else -delta), 0.0, 1.2)
 	var alarm: bool = _detect >= 1.0
 	_light.light_color = Color(1.0, 0.2, 0.15) if alarm else Color(1.0, 0.97, 0.9)
 	if alarm and lit:

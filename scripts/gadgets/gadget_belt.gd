@@ -9,6 +9,8 @@ signal feedback(message: String)
 ## Emitted whenever a gadget is used (disguise systems listen to this).
 signal gadget_used(gadget: StringName)
 signal parts_changed(parts: int)
+## Jammer aim assist: a device/hunter is under (or near) the crosshair.
+signal aim_target_changed(has_target: bool, label: String)
 
 const GADGET_JAMMER: StringName = &"jammer"
 const GADGET_EMP: StringName = &"emp"
@@ -19,7 +21,9 @@ const GADGET_DECOY: StringName = &"decoy"
 @export var max_darts: int = 8
 @export var max_emps: int = 3
 @export var max_cells: int = 6
-@export var dart_range: float = 40.0
+@export var dart_range: float = 45.0
+## Half-angle of the Jammer Dart aim-assist cone.
+@export var dart_assist_degrees: float = 7.0
 @export var dart_disable_seconds: float = 20.0
 @export var dart_blind_seconds: float = 4.0
 @export var emp_resonance_spike: float = 15.0
@@ -37,6 +41,7 @@ var selected: StringName = GADGET_JAMMER
 var _player: PlayerController
 var _decoys: Array[DecoyEmitter] = []
 var _order: Array[StringName] = [GADGET_JAMMER, GADGET_EMP, GADGET_DECOY]
+var _aim_label: String = ""
 
 
 func _ready() -> void:
@@ -75,8 +80,75 @@ func handle_input() -> void:
 		_cycle(1)
 	elif Input.is_action_just_pressed(&"gadget_prev"):
 		_cycle(-1)
+	_update_aim()
 	if Input.is_action_just_pressed(&"use_gadget") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		use_selected()
+
+
+func _update_aim() -> void:
+	var label: String = ""
+	if selected == GADGET_JAMMER:
+		var target: Dictionary = find_dart_target()
+		var node := target.get("node") as Node
+		if node != null:
+			label = Electronics.describe(node)
+	if label != _aim_label:
+		_aim_label = label
+		aim_target_changed.emit(label != "", label)
+
+
+## Returns {"node": target, "point": aim point} for the dart, using the crosshair ray first
+## and then an aim-assist cone over every jammable hitbox and hunter in range.
+func find_dart_target() -> Dictionary:
+	var camera: Camera3D = _player.get_view_camera()
+	var origin: Vector3 = camera.global_position
+	var forward: Vector3 = -camera.global_basis.z
+	var mask: int = GeometryKit.WORLD_LAYER | GeometryKit.DOOR_LAYER | Electronics.HITBOX_LAYER | 4
+	var space: PhysicsDirectSpaceState3D = _player.get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + forward * dart_range, mask, [_player.get_rid()])
+	var hit: Dictionary = space.intersect_ray(query)
+	if not hit.is_empty():
+		var collider: Object = hit.get("collider")
+		var direct: Node = Electronics.resolve(collider, Electronics.ELECTRONICS_GROUP)
+		if direct == null:
+			direct = Electronics.resolve(collider, Electronics.EMP_GROUP)
+		if direct != null:
+			return {"node": direct, "point": hit.get("position")}
+	var best: Node = null
+	var best_point: Vector3 = Vector3.ZERO
+	var best_angle: float = deg_to_rad(dart_assist_degrees)
+	var candidates: Array[Node3D] = []
+	for node: Node in _player.get_tree().get_nodes_in_group(Electronics.HITBOX_GROUP):
+		var box := node as Node3D
+		if box != null:
+			candidates.append(box)
+	for node: Node in _player.get_tree().get_nodes_in_group(Electronics.EMP_GROUP):
+		var body := node as Node3D
+		if body != null:
+			candidates.append(body)
+	for candidate: Node3D in candidates:
+		var point: Vector3 = candidate.global_position + (Vector3(0.0, 1.3, 0.0) if candidate.is_in_group(Electronics.EMP_GROUP) else Vector3.ZERO)
+		var to: Vector3 = point - origin
+		if to.length() > dart_range or to.length() < 0.5:
+			continue
+		var angle: float = forward.angle_to(to)
+		if angle >= best_angle:
+			continue
+		var los := PhysicsRayQueryParameters3D.create(origin, point, GeometryKit.WORLD_LAYER | GeometryKit.DOOR_LAYER, [_player.get_rid()])
+		var blocked: Dictionary = space.intersect_ray(los)
+		if not blocked.is_empty() and (blocked.get("position", point) as Vector3).distance_to(point) > 0.6:
+			continue
+		var owner_device: Node = Electronics.resolve(candidate, Electronics.ELECTRONICS_GROUP)
+		if owner_device == null:
+			owner_device = Electronics.resolve(candidate, Electronics.EMP_GROUP)
+		if owner_device == null:
+			continue
+		best = owner_device
+		best_point = point
+		best_angle = angle
+	if best == null:
+		return {}
+	return {"node": best, "point": best_point}
 
 
 func use_selected() -> bool:
@@ -153,28 +225,20 @@ func _fire_dart() -> bool:
 		return false
 	darts -= 1
 	var camera: Camera3D = _player.get_view_camera()
-	var origin: Vector3 = camera.global_position
-	var target: Vector3 = origin - camera.global_basis.z * dart_range
-	var mask: int = GeometryKit.WORLD_LAYER | GeometryKit.DOOR_LAYER | Electronics.HITBOX_LAYER | 4
-	var query := PhysicsRayQueryParameters3D.create(origin, target, mask, [_player.get_rid()])
-	var hit: Dictionary = _player.get_world_3d().direct_space_state.intersect_ray(query)
 	var muzzle: Vector3 = _player.global_position + Vector3(0.0, 1.35, 0.0) + _player.get_facing() * 0.4
-	var end: Vector3 = hit.get("position", target)
+	var target: Dictionary = find_dart_target()
+	var node := target.get("node") as Node
+	var end: Vector3 = target.get("point", camera.global_position - camera.global_basis.z * dart_range)
 	HunterFX.beam(_player.get_parent(), muzzle, end, Color(0.3, 0.9, 1.0), 0.15)
 	publish()
-	if hit.is_empty():
+	if node == null:
 		return true
-	var collider: Object = hit.get("collider")
-	var device: Node = Electronics.resolve(collider, Electronics.ELECTRONICS_GROUP)
-	if device != null and device.has_method(&"disable_for"):
-		device.call(&"disable_for", dart_disable_seconds)
-		Electronics.sparks(_player.get_parent(), end, Color(0.4, 0.9, 1.0))
-		feedback.emit("Jammed - offline for %d s." % int(dart_disable_seconds))
-		return true
-	var receiver: Node = Electronics.resolve(collider, Electronics.EMP_GROUP)
-	if receiver != null and receiver.has_method(&"apply_emp"):
-		receiver.call(&"apply_emp", dart_blind_seconds)
-		Electronics.sparks(_player.get_parent(), end, Color(0.4, 0.9, 1.0))
+	Electronics.sparks(_player.get_parent(), end, Color(0.4, 0.9, 1.0))
+	if node.has_method(&"disable_for"):
+		node.call(&"disable_for", dart_disable_seconds)
+		feedback.emit("%s jammed - offline for %d s." % [Electronics.describe(node).capitalize(), int(dart_disable_seconds)])
+	elif node.has_method(&"apply_emp"):
+		node.call(&"apply_emp", dart_blind_seconds)
 		feedback.emit("Hunter visor scrambled.")
 	return true
 
