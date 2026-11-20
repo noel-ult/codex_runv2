@@ -16,6 +16,7 @@ extends Node3D
 @onready var _terminal: HackTerminal = $HackTerminal
 @onready var _time: TimeOfDay = $TimeOfDay
 @onready var _weather: WeatherSystem = $Weather
+@onready var _prep: PrepStationUI = $PrepStation
 @onready var _echoes: Node3D = $Echoes
 
 
@@ -54,7 +55,26 @@ func _ready() -> void:
 	_player.captured.connect(_mission.on_runner_captured)
 	_terminal.opened_changed.connect(func(open: bool) -> void: _player.input_enabled = not open)
 	_hud.bind_terminal(_terminal)
+
+	# Hideout: prep station + resting through the day.
+	var hideout: Hideout = _city.hideout
+	_prep.setup(_player, _time, _weather)
+	hideout.can_rest = _time.is_daytime
+	hideout.station_opened.connect(func(_actor: Node3D) -> void: _prep.open())
+	hideout.rest_requested.connect(func(_actor: Node3D) -> void: _rest_until_dusk())
+	_prep.rest_requested.connect(_rest_until_dusk)
+	_prep.opened_changed.connect(func(open: bool) -> void: _player.input_enabled = not open)
 	_mission.start()
+
+
+func _rest_until_dusk() -> void:
+	if not _time.is_daytime():
+		return
+	_player.input_enabled = false
+	_prep.play_rest_fade(func() -> void:
+		_time.skip_to(19.0)
+		_player.get_codex().reset_resonance()
+		_player.input_enabled = true)
 
 
 func _unhandled_input(event: InputEvent) -> void:

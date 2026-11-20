@@ -80,6 +80,12 @@ func _physics_process(delta: float) -> void:
 		global_position.y -= delta * (2.0 + _falling * 12.0)
 		rotation.z += delta * 3.0
 		if _falling > 1.6:
+			var salvage := Pickup.new()
+			salvage.kind = Pickup.KIND_PARTS
+			salvage.amount = 2
+			salvage.one_shot = true
+			get_parent().add_child(salvage)
+			salvage.global_position = Vector3(global_position.x, _ground_height(global_position), global_position.z)
 			expired.emit(self)
 			queue_free()
 		return

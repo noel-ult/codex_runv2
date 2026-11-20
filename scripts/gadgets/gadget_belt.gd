@@ -8,6 +8,7 @@ signal inventory_changed(selected: StringName, darts: int, emps: int, cells: int
 signal feedback(message: String)
 ## Emitted whenever a gadget is used (disguise systems listen to this).
 signal gadget_used(gadget: StringName)
+signal parts_changed(parts: int)
 
 const GADGET_JAMMER: StringName = &"jammer"
 const GADGET_EMP: StringName = &"emp"
@@ -27,6 +28,10 @@ const GADGET_DECOY: StringName = &"decoy"
 var darts: int = 4
 var emps: int = 1
 var cells: int = 0
+## Salvage parts: currency for the hideout prep station.
+var parts: int = 4
+## Extra decoy charge capacity bought at the prep station.
+var decoy_bonus: float = 0.0
 var selected: StringName = GADGET_JAMMER
 
 var _player: PlayerController
@@ -105,8 +110,27 @@ func collect(kind: StringName, amount: int) -> bool:
 				return false
 			emps = mini(emps + amount, max_emps)
 			feedback.emit("EMP charge +%d" % amount)
+		Pickup.KIND_PARTS:
+			add_parts(amount)
+			return true
 		_:
 			return false
+	publish()
+	return true
+
+
+func add_parts(amount: int) -> void:
+	parts += amount
+	feedback.emit("Salvage +%d  (%d parts - spend them at the hideout prep station)" % [amount, parts])
+	parts_changed.emit(parts)
+	publish()
+
+
+func spend_parts(cost: int) -> bool:
+	if parts < cost:
+		return false
+	parts -= cost
+	parts_changed.emit(parts)
 	publish()
 	return true
 
@@ -190,6 +214,8 @@ func _deploy_decoy() -> bool:
 		feedback.emit("No solid ground to place the decoy.")
 		return false
 	var decoy := DecoyEmitter.new()
+	decoy.max_charge += decoy_bonus
+	decoy.imprint_amount += decoy_bonus * 0.5
 	decoy.name = "DecoyEmitter"
 	_player.get_parent().add_child(decoy)
 	decoy.global_position = hit.get("position", origin)

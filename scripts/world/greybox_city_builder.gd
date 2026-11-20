@@ -28,6 +28,7 @@ var traffic_vehicles: Array[TrafficVehicle] = []
 var uplink_stations: Array[UplinkStation] = []
 var facility: FacilityCompound
 var npcs: Array[NpcWalker] = []
+var hideout: Hideout
 var patrol_points: Array[Vector3] = []
 var hunter_spawn_points: Array[Vector3] = []
 var player_spawn_point: Vector3 = Vector3(0.0, 0.2, 29.0)
@@ -51,6 +52,7 @@ func _ready() -> void:
 	_build_street_furniture()
 	_build_parked_cars()
 	_build_uplinks()
+	_build_hideout()
 	_build_pickups()
 	_build_vehicle_routes()
 	_collect_points()
@@ -476,9 +478,21 @@ func _add_npc(npc_style: HumanoidRig.Style, seed_value: int, route: Array[Vector
 	npcs.append(npc)
 
 
+# --- Hideout --------------------------------------------------------------------------
+
+func _build_hideout() -> void:
+	hideout = Hideout.new()
+	hideout.name = "Hideout"
+	hideout.position = Vector3(-MAP_HALF_EXTENT + 5.5, 0.0, -48.0)
+	add_child(hideout)
+	dead_zones.append(hideout.dead_zone)
+
+
 # --- Pickups ---------------------------------------------------------------------------
 
 func _build_pickups() -> void:
+	for at: Vector3 in [Vector3(-46.0, 0.1, -13.0), Vector3(13.0, 0.1, 46.0), Vector3(-58.0, 0.0, 8.0), Vector3(40.0, 0.0, 66.0), Vector3(-36.0, 0.1, 22.0), Vector3(66.0, 0.0, -58.0)]:
+		_add_pickup(at, Pickup.KIND_PARTS, 2)
 	var cells: Array[Vector3] = [
 		Vector3(-29.0, 0.1, -29.0), Vector3(-39.75, 12.1, -39.75), Vector3(-36.0, 0.1, 35.0),
 		Vector3(58.5, 0.0, 9.0), Vector3(29.0, 8.4, 18.25), Vector3(29.0, 0.1, 23.0),

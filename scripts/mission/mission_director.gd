@@ -147,6 +147,7 @@ func _on_session_completed(session_id: StringName) -> void:
 		&"suit":
 			has_credentials = true
 			_director.resolve_suit_hack(_suit_hunter, true, _player.global_position)
+			_player.get_gadgets().add_parts(3)
 			radio_message.emit("HunterNet credentials captured. The Hunter never noticed. Head for Meridian Signal Labs (NE).")
 			marker_changed.emit(&"facility", _compound.get_entrance_position() + Vector3(0.0, 3.0, 0.0), "MERIDIAN LABS", Color(1.0, 0.75, 0.3), true)
 		&"database":

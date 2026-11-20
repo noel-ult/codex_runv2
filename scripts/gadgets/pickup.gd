@@ -7,10 +7,13 @@ extends Area3D
 const KIND_CELL: StringName = &"cell"
 const KIND_DARTS: StringName = &"darts"
 const KIND_EMP: StringName = &"emp"
+const KIND_PARTS: StringName = &"parts"
 
 @export var kind: StringName = KIND_CELL
 @export var amount: int = 1
 @export var respawn_time: float = 75.0
+## One-shot pickups (e.g. drone salvage) free themselves instead of respawning.
+@export var one_shot: bool = false
 
 var _visual: Node3D
 var _respawn_left: float = 0.0
@@ -55,6 +58,10 @@ func _build_visual() -> void:
 			GeometryKit.cylinder(_visual, Vector3.ZERO, 0.09, 0.09, 0.34, glow, 12)
 			GeometryKit.cylinder(_visual, Vector3(0.0, 0.2, 0.0), 0.11, 0.11, 0.06, shell, 12)
 			GeometryKit.cylinder(_visual, Vector3(0.0, -0.2, 0.0), 0.11, 0.11, 0.06, shell, 12)
+		KIND_PARTS:
+			GeometryKit.mesh_box(_visual, Vector3(0.0, -0.05, 0.0), Vector3(0.36, 0.14, 0.26), MaterialLibrary.coated(Color(0.35, 0.37, 0.4), 0.9, 0.3))
+			GeometryKit.cylinder(_visual, Vector3(0.1, 0.06, 0.0), 0.05, 0.05, 0.08, glow, 10)
+			GeometryKit.mesh_box(_visual, Vector3(-0.08, 0.05, 0.0), Vector3(0.12, 0.06, 0.18), shell)
 		_:
 			GeometryKit.mesh_box(_visual, Vector3.ZERO, Vector3(0.5, 0.3, 0.35), shell)
 			GeometryKit.mesh_box(_visual, Vector3(0.0, 0.0, 0.18), Vector3(0.35, 0.08, 0.01), glow)
@@ -72,6 +79,8 @@ func get_color() -> Color:
 			return Color(0.3, 0.85, 1.0)
 		KIND_EMP:
 			return Color(0.55, 0.6, 1.0)
+		KIND_PARTS:
+			return Color(0.75, 0.85, 0.95)
 	return Color(1.0, 0.72, 0.25)
 
 
@@ -79,6 +88,9 @@ func _on_body_entered(body: Node3D) -> void:
 	if _respawn_left > 0.0 or not body.has_method(&"collect_pickup"):
 		return
 	if bool(body.call(&"collect_pickup", kind, amount)):
+		if one_shot:
+			queue_free()
+			return
 		_visual.visible = false
 		_respawn_left = respawn_time
 		set_deferred(&"monitoring", false)

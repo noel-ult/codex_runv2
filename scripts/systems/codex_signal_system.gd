@@ -75,6 +75,11 @@ var echo_container: Node
 var decay_scale: float = 1.0
 ## Multiplier on Release radius set by gameplay (e.g. a disguise dampens the pulse).
 var release_radius_scale: float = 1.0
+## Permanent multiplier from the hideout "signature dampener" upgrade.
+var upgrade_radius_scale: float = 1.0
+## Daylight exposure: Releases reach further and come sooner during the day.
+var daylight_radius_scale: float = 1.0
+var daylight_interval_scale: float = 1.0
 
 var _host: Node3D
 var _dead_zone_count: int = 0
@@ -127,7 +132,7 @@ func get_release_time_left() -> float:
 
 
 func get_release_radius() -> float:
-	return (release_base_radius + resonance * release_radius_per_resonance) * release_radius_scale
+	return (release_base_radius + resonance * release_radius_per_resonance) * release_radius_scale * upgrade_radius_scale * daylight_radius_scale
 
 
 static func get_ability_display_name(ability: StringName) -> String:
@@ -293,10 +298,10 @@ func _update_release(delta: float) -> void:
 	_countdown_tick -= delta
 	if _countdown_tick <= 0.0:
 		_countdown_tick = 0.1
-		release_countdown.emit(maxf(_release_left, 0.0), release_interval)
+		release_countdown.emit(maxf(_release_left, 0.0), release_interval * daylight_interval_scale)
 	if _release_left > 0.0:
 		return
-	_release_left = release_interval
+	_release_left = release_interval * daylight_interval_scale
 	var radius: float = get_release_radius()
 
 	var decoy: Node3D = _strongest_decoy()
