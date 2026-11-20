@@ -1,15 +1,25 @@
 # Codex Run — Hunters vs. Runner (Godot 4 Vertical Slice)
 
-An open-world stealth-chase vertical slice built in **Godot 4** with strictly typed GDScript.
-Every visual (city, vehicles, characters, effects, HUD) is built from primitives at runtime, so there are **zero external assets**.
+An open-world stealth-chase heist set in a rain-slicked night city, built in **Godot 4** with strictly typed GDScript.
+There are **no imported asset files**. Every surface texture comes from procedural shaders (brick, concrete, glass curtain walls with lit interiors, wet asphalt, paving, painted steel, foliage, worn road paint), and every model is assembled from primitives in code. The characters are jointed humanoid rigs animated procedurally.
 
 ## Running
 
-1. Clone the repo and open `project.godot` in **Godot 4.7** (verified on 4.7.2; older 4.x releases are untested). The Forward+ renderer falls back to OpenGL automatically if Vulkan is unavailable.
+1. Clone the repo and open `project.godot` in **Godot 4.7** (verified on 4.7.2; older 4.x releases are untested). Forward+ falls back to OpenGL automatically if Vulkan is unavailable.
 2. Press **Play** (F5). The main scene is `res://scenes/main.tscn`.
 
 > Opening the project in the editor once generates Godot's `.godot/` class cache, which the scripts' `class_name` types need.
-> To run from the CLI without opening the editor, import first: `godot --headless --path . --import`.
+> To run from the CLI without opening the editor, import first: `godot --headless --path . --import`, then `godot --path .`.
+
+## The goal
+
+You carry the **Codex**. To send it to safety you must:
+
+1. **Find the live uplink relay.** Four identical dormant relay masts stand on the city's edge (N, E, S, W). Only the Hunters know which one is genuine, and every ~30 s one of them is ordered to **sweep** it (you'll hear a *RADIO INTERCEPT*). Shadow that Hunter and keep the relay in line of sight within 45 m while it scans. The relay blinks blue during the handshake, and after 2.5 s it is decoded and marked on your HUD. The genuine relay changes every run.
+2. **Break into Meridian Signal Labs** (the walled compound in the north-east block) and steal the **Uplink Key** from its vault.
+3. **Carry the Key to the live relay and transmit** (hold E). For 30 s the uplink broadcasts your position to every Hunter. Stay within 16 m of the mast until it completes.
+
+If you're caught while carrying the Key, it goes back to the vault. Doors you've hacked stay open, and the relay stays known.
 
 ## Controls
 
@@ -17,72 +27,88 @@ Every visual (city, vehicles, characters, effects, HUD) is built from primitives
 | --- | --- |
 | W A S D / Arrows | Move (camera-relative) |
 | Mouse | Orbit the camera |
-| Space | Jump. Press it again in the air for a **Super Jump** (Micro-Fusion) |
+| Space | Jump. Press again in the air for a **Super Jump** (Micro-Fusion) |
 | Q | Super Jump from the ground (Micro-Fusion) |
 | Shift | **Micro Dash** (Micro-Fusion) |
 | F | Toggle **Full Form** |
-| E | **Fracture Codex** onto the vehicle under the crosshair |
-| R | Restart the slice |
+| E (hold) | Interact: hack panels, vault console, Uplink Key, roof hatch, relay |
+| E (tap) | **Fracture the Codex** onto the vehicle under the crosshair (when nothing to interact with is nearby) |
+| R | Restart |
 | Esc / Click | Release / capture the mouse |
+
+## Breaking into Meridian Signal Labs
+
+| Route | How | Cost |
+| --- | --- | --- |
+| Vehicle gate (south) | Opens only for Hunters passing through. Slip in behind one | Timing. The yard has CCTV and a searchlight |
+| Service door (west wall) | Hold E at the keypad for 3 s | +30 Resonance |
+| Over the wall / roof | Full Form jump + mid-air Super Jump, then hold E at the roof hatch to drop straight into the vault | Very loud: Full Form + Micro-Fusion |
+| Vault door (inside the hall) | Hold E at the vault console for 4 s | +25 Resonance |
+
+**Security cameras** (sweeping cones) and the **searchlight tower** see you in any Form. A sustained sighting reports your position to the Hunters. Taking the Key trips a **4 s silent alarm**. While you carry the Key, Resonance decays 40% slower.
 
 ## The Codex risk–reward loop
 
-- **Base Form**: slow (4.5 m/s) and invisible to Hunters. They only ever learn where you are from Codex signals.
+- **Base Form**: slow (4.5 m/s) and invisible to Hunters. They only learn where you are from signals: Ignition, CCTV, the silent alarm, and the uplink.
 - **Micro-Fusions**: Micro Dash (+20) and Super Jump (+26) spike **Resonance** (0–100). Below 100, Resonance decays by 8/s.
-- **Full Form**: 12.5 m/s and much higher jumps, but builds Resonance at 27/s (net +19/s after decay).
-- **Codex Ignition**: reaching 100 pins Resonance for 2.5 s, then it may decay. Until it falls below 60, your **live 3D coordinates** are broadcast to the Hunter AI at 20 Hz, and a decaying **Residual Echo** (orange ring) drops every 2.5 s.
-- **Codex Fracturing (decoy)**: aim at a moving vehicle and press **E**. An ability detaches onto it (Full Form if it's active, otherwise your last-used Micro-Fusion), and the vehicle becomes a pulsing **fake Codex beacon**. Resonance drops by 45, which usually ends an Ignition. That ability stays **LOCKED** until you physically touch the vehicle again (after a 2 s grace period).
-- **Dead Zones** (purple volumes): the **East Tunnel** over the ring road and the **Warehouse** interior in the south-west block. Inside, broadcasts are masked, echo drops stop, and Resonance decays 3× faster.
-- **Capture**: a Hunter in Apex Pursuit that reaches a fresh broadcast position catches you. You respawn with 0 Resonance. Fractured abilities stay on their vehicles.
+- **Full Form**: 12.5 m/s and high jumps, but builds Resonance at 27/s (net +19/s after decay).
+- **Codex Ignition**: reaching 100 pins Resonance for 2.5 s. Until it drops below 60, your **live 3D coordinates** are broadcast at 20 Hz, and a decaying **Residual Echo** drops every 2.5 s.
+- **Codex Fracturing (decoy)**: tap E while aiming at a moving vehicle. An ability detaches onto it and the vehicle becomes a **fake Codex beacon** that pulls Hunters away. Resonance drops by 45. The ability stays **LOCKED** until you physically touch that vehicle again.
+- **Dead Zones** (violet haze): the **East Tunnel** on the ring road and the **SW Warehouse**. Inside, broadcasts are masked, echo drops stop, and Resonance decays 3× faster.
+- **Capture**: physical contact with a Hunter that is **pursuing or searching** (red or amber visor) catches you. Patrolling Hunters (green) can't perceive you. You respawn with 0 Resonance.
 
 ## Hunter AI
 
-Each Hunter runs an FSM, and the state is shown by the ring above its head:
+Each Hunter runs an FSM. The state shows in its visor, chest lamp and halo:
 
 | State | Colour | Trigger |
 | --- | --- | --- |
-| `PATROL` | Green | Default: wanders random street/alley waypoints |
-| `INVESTIGATE_ECHO` | Amber | Best-scoring Residual Echo in range (fresh + close), or the last known position once the live signal is lost |
-| `APEX_PURSUIT` | Red | Live Ignition coordinates are fresh (< 1 s old) |
-| `CHASE_DECOY` | Violet | Each active decoy beacon pulls its 2 nearest Hunters. A Hunter within 12 m of a live signal ignores decoys |
+| `PATROL` | Green | Wanders streets, alleys, the compound and the relays. Periodically **sweeps** the genuine relay (still `PATROL`, with the scanner arm raised) |
+| `INVESTIGATE_ECHO` | Amber | Best Residual Echo in range, or the last known position once a live signal is lost |
+| `APEX_PURSUIT` | Red | A live position report (Ignition, CCTV, alarm, uplink) is < 1 s old |
+| `CHASE_DECOY` | Violet | Each active decoy pulls its 2 nearest Hunters, except Hunters already within 12 m of a live signal |
 
 ## Architecture
 
 ```
 Main (main.gd — composition root: the ONLY place systems are connected)
-├── WorldEnvironment / DirectionalLight3D
-├── NavigationRegion3D            (NavigationMesh baked at runtime from static colliders, layer 1)
-│   └── City (greybox_city_builder.gd)  → buildings, alleys, rooftops, 2 DeadZones, 3 Path3D routes
-│        └── Route_*/PathFollow3D/DecoyVehicle (decoy_vehicle.gd)
-├── Echoes                        (container for ResidualEcho nodes)
-├── Player (player.tscn: CharacterBody3D + SpringArm camera + InteractionRay)
-│   └── CodexSignalSystem (codex_signal_system.gd)
-├── HunterAIDirector (hunter_ai_director.gd) → spawns 4× hunter.tscn (hunter_agent.gd)
-└── HUD (hud.gd, CanvasLayer built in code)
+├── WorldEnvironment (night sky, volumetric fog, SSAO, SSR, glow) / Moon
+├── NavigationRegion3D            (navmesh baked at runtime from world-layer colliders)
+│   └── City (greybox_city_builder.gd)
+│        ├── BuildingFactory / PropFactory / VehicleModel (procedural structures)
+│        ├── MeridianSignalLabs (facility_compound.gd: AutoGate, SlidingDoors, SecurityCameras,
+│        │                       SearchlightTower, Interactables, vault + Uplink Key)
+│        ├── 4× UplinkStation, 2× DeadZone, 3× Path3D/PathFollow3D/DecoyVehicle
+├── Echoes                        (ResidualEcho container)
+├── Player (player.tscn: CharacterBody3D + HumanoidRig + SpringArm camera + InteractionRay)
+│   └── CodexSignalSystem
+├── HunterAIDirector → 4× hunter.tscn (HunterAgent + HumanoidRig + flashlight + CatchArea)
+├── MissionDirector (objective chain, sweep observation, transmission)
+└── HUD (built in code)
 ```
 
 **Decoupling rules**
 
-- `CodexSignalSystem` owns all Codex rules and talks outward **only through signals**: `resonance_changed`, `form_changed`, `codex_ignited`, `ignition_broadcast`, `echo_dropped`, `decoy_beacon_activated/deactivated`, `ability_lock_changed`, `dead_zone_changed`, and so on.
-- `CodexSignalSystem` and `PlayerController` hold **no references to Hunter AI**. Data flows one way: Codex → signals → Director → Hunters.
-- Capture flows back through signals too: `HunterAIDirector.runner_caught` → `PlayerController.on_caught` → `PlayerController.captured` → `HunterAIDirector.on_runner_respawned`. `main.gd` wires all of these.
-- Decoys implement a small "fracture beacon" contract (`attach_fractured_ability`, `release_fractured_ability`, `is_beacon_active`, signal `runner_contact`), so the Codex system doesn't depend on any concrete world class.
-- `DeadZone` areas only emit `runner_entered/exited`, and `main.gd` connects those to the Codex.
+- `CodexSignalSystem` and `PlayerController` hold **no references to Hunter AI**. Data flows Codex → signals → Director → Hunters.
+- World systems never touch Hunters either. `FacilityCompound.intruder_spotted` and `MissionDirector.signal_reported` are wired by `main.gd` into `HunterAIDirector.report_signal()`.
+- The Director tells the mission about sweeps only through signals (`site_sweep_dispatched`, `site_sweep_scanning`).
+- Captures flow `HunterAgent.runner_touched` → `HunterAIDirector.runner_caught` → `PlayerController.on_caught` → `captured` → Director grace period and mission reset.
 
-**Physics layers**: 1 world, 2 runner, 3 hunters, 4 vehicles, 5 triggers. The navmesh parses layer 1 only, so moving vehicles never cut holes in it. Its baking AABB is capped at 3 m height, so Hunters stay on the streets and rooftops are a refuge.
+**Rendering**: one shared material per surface type. Per-building variety (colour, style, seed, lit-window ratio, storefronts) comes from shader **instance uniforms**. Window and sign glyph patterns are hashed, so the city is deterministic and costs only a handful of shaders.
 
-**Strict typing**: `project.godot` treats untyped declarations and Variant inference as **errors**, and unsafe access/casts as warnings. The project produces zero warnings.
+**Physics layers**: 1 world, 2 runner, 3 hunters, 4 vehicles, 5 triggers, 6 doors. The navmesh parses layer 1 only. The vehicle gate sits on the door layer, so Hunters path through it and it opens for them.
 
-## Testing each mechanic in-game
+**Strict typing**: `project.godot` treats untyped declarations and Variant inference as **errors**. The project produces zero warnings.
 
-1. **Stealth / Base Form**: walk past a green-ring Hunter. It ignores you.
-2. **Micro-Fusions**: tap Shift (dash) and Q or double Space (super jump). Watch the Resonance bar spike and then decay.
-3. **Ignition**: hold Full Form (F) for about 5 s. The red `CODEX IGNITED` banner appears, Hunter rings turn red, orange echoes drop every 2.5 s, and the HUD census shows `APEX PURSUIT`.
-4. **Echo trail**: after Ignition ends (Resonance < 60), Hunters turn amber and follow the freshest echoes or your last known position.
-5. **Dead Zone**: while ignited, run into the East Tunnel (ring road, east side) or the Warehouse (south-west block, doors on the west and east walls). The `DEAD ZONE` badge appears, the banner switches to `BROADCAST MASKED`, echoes stop, and Resonance drains 3× faster.
-6. **Fracture decoy**: aim the crosshair at a passing vehicle until the `[E] FRACTURE CODEX ONTO …` prompt shows, then press E. A coloured beam appears on the vehicle, Resonance drops by 45, the ability shows `FRACTURED -> <VEHICLE> (LOCKED)`, and violet-ring Hunters chase the vehicle.
-7. **Re-absorb**: catch up to that vehicle and touch it. The ability unlocks and the beam disappears.
-8. **Capture**: stay ignited near red Hunters. `CAUGHT BY HUNTERS` flashes, you respawn, and the capture counter goes up.
+## Testing each piece in-game
+
+1. **Stealth**: walk past a green-visor Hunter. It ignores you.
+2. **Ignition / echoes**: hold Full Form (F) for about 5 s. The `CODEX IGNITED` banner appears, visors turn red, and orange echo rings drop.
+3. **Dead Zone**: while ignited, enter the East Tunnel or the SW Warehouse. The banner switches to `BROADCAST MASKED`.
+4. **Decoy**: aim at a passing car and tap E. A beam and ring appear on the car, and violet-visor Hunters chase it. Touch the car to re-absorb the ability.
+5. **Find the relay**: wait for the *RADIO INTERCEPT*, follow the Hunter that peels off, and watch from cover until the decode bar fills.
+6. **Heist**: use any route into Meridian Signal Labs, open the vault, and take the Key (watch the CCTV cones).
+7. **Transmit**: hold E at the live relay and survive 30 s within 16 m. The `CODEX TRANSMITTED` screen appears.
 
 ## Headless verification
 
