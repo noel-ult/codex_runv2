@@ -27,7 +27,7 @@ const RELAY_SPOOF_SECONDS: float = 24.0
 const RELAY_SPOOF_COLOR: Color = Color(0.78, 0.56, 1.0)
 const CHECKPOINT_PATH: String = "user://mission_checkpoint.cfg"
 
-@export var transmit_duration: float = 30.0
+@export var transmit_duration: float = 50.0
 @export var transmit_radius: float = 16.0
 @export var trace_alarm_time: float = 6.0
 @export var terminal_lockout: float = 20.0

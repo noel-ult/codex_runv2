@@ -22,7 +22,7 @@ You carry the **Codex**. The only way to send it to safety is through the Hunter
 2. **Infiltrate Meridian Signal Labs** (the walled compound in the NE block) and authenticate at the **HunterNet core** door with the credentials.
 3. **Breach the Main Hunter Database** in three retro layers on the CRT terminal: **Signal Lock**, then **Firewall Override**, then **Cipher Recovery**. Mistakes raise the **TRACE** meter. At 100% the HunterNet locates you (alarm) and locks the terminal for 20 s.
 4. **Lockdown.** A successful breach reveals the one live uplink relay and its cipher. It also triggers a HunterNet lockdown: every Hunter converges, the relay guard doubles, and the Codex Release speeds up to every 20 s. Before starting the uplink, you can use the violet relay marker to send a false handshake and divert up to two Hunters for 24 seconds.
-5. **Transmit.** Hold **E** at the live relay and survive **30 s** within 16 m while the uplink broadcasts your position.
+5. **Transmit.** Hold **E** at the live relay and survive **50 s** within 16 m while the uplink broadcasts your position.
 
 Before decoding, capture sends you back to the packet-copy step. After decoding, capture returns you to Storage 07 with your lab credentials and resets core access, the database breach and uplink progress. Your gear, upgrades and credits survive capture. Storage 07 protects you from Hunter contact inside its sheltered room.
 

@@ -36,7 +36,7 @@ Render visual checks through a 1280×720 `SubViewport` sharing the main world's 
 2. Carry the packet to Storage 07 on the west edge. Follow the decoder marker and hold E at the HunterNet decoder inside the safehouse. Win Signal Lock to recover lab credentials and automatically save the credential checkpoint. Escape cancels decoding and retains the packet for another attempt.
 3. Infiltrate Meridian Signal Labs in the northeast block and authenticate at the HunterNet core door. A technician disguise opens staff entrances, and the other infiltration routes remain available.
 4. Breach the database through Signal Lock, Firewall Override, and Cipher Recovery. Firewall Override shows three number prompts to answer with keys 1–3. Wrong answers raise trace. Trace can abort the breach and temporarily lock the terminal. Success reveals the live relay and starts lockdown.
-5. Reach that relay and transmit within its radius for 30 seconds.
+5. Reach that relay and transmit within its radius for 50 seconds.
 
 Cipher Recovery gives a clue on each submitted tile. Green marks an exact match, amber marks a glyph that belongs in another slot, and dim marks an unmatched tile. The secret uses distinct glyphs, and repeated guesses of the same glyph can match it only once per row. Exact matches take priority.
 
