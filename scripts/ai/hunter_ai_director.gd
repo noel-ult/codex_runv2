@@ -29,6 +29,9 @@ signal runner_caught()
 @export var capture_radius: float = 1.9
 @export var capture_vertical_tolerance: float = 2.5
 @export var capture_grace_period: float = 3.0
+## A capture only counts against a broadcast at most this old, so a masked or
+## teleported Runner cannot be caught at stale coordinates.
+@export var capture_signal_max_age: float = 0.15
 @export var random_seed: int = 7
 
 var _hunters: Array[HunterAgent] = []
@@ -41,6 +44,7 @@ var _last_live_time: float = -1000.0
 var _decision_left: float = 0.0
 var _grace_left: float = 0.0
 var _census: Vector4i = Vector4i(-1, -1, -1, -1)
+var _clock: float = 0.0
 
 
 func bind_codex(codex: CodexSignalSystem) -> void:
@@ -84,6 +88,7 @@ func get_hunters() -> Array[HunterAgent]:
 
 
 func _physics_process(delta: float) -> void:
+	_clock += delta
 	_grace_left = maxf(_grace_left - delta, 0.0)
 	_check_capture()
 	_decision_left -= delta
@@ -97,7 +102,7 @@ func _is_live() -> bool:
 
 
 func _check_capture() -> void:
-	if not _is_live():
+	if _grace_left > 0.0 or _now() - _last_live_time > capture_signal_max_age:
 		return
 	for hunter: HunterAgent in _hunters:
 		if hunter.state != HunterAgent.State.APEX_PURSUIT:
@@ -199,7 +204,7 @@ func _emit_census() -> void:
 
 
 func _now() -> float:
-	return Time.get_ticks_msec() / 1000.0
+	return _clock
 
 
 # --- Codex signal handlers -------------------------------------------------------
