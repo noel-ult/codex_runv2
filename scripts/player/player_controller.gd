@@ -56,6 +56,10 @@ var _shake: float = 0.0
 var _aura: GPUParticles3D
 var _aura_material: StandardMaterial3D
 var _dash_trail: GPUParticles3D
+var _slow_left: float = 0.0
+var _slow_factor: float = 1.0
+var _tether_left: float = 0.0
+var _tether_anchor: Vector3 = Vector3.ZERO
 
 @onready var _codex: CodexSignalSystem = $CodexSignalSystem
 @onready var _camera_pivot: Node3D = $CameraPivot
@@ -124,12 +128,33 @@ func teleport(target: Vector3) -> void:
 	velocity = Vector3.ZERO
 
 
+## Hunter Tether Harpoon: slows the Runner and reels them toward the anchor.
+func apply_tether(anchor: Vector3, duration: float) -> void:
+	_tether_left = maxf(_tether_left, duration)
+	_tether_anchor = anchor
+	_shake = maxf(_shake, 0.35)
+	feedback.emit("TETHERED! Break line of sight or EMP the Hunter.")
+
+
+## Generic slow (sentry stun bolts etc.).
+func apply_slow(duration: float, factor: float) -> void:
+	_slow_left = maxf(_slow_left, duration)
+	_slow_factor = clampf(factor, 0.1, 1.0)
+	_shake = maxf(_shake, 0.25)
+
+
+func is_impaired() -> bool:
+	return _tether_left > 0.0 or _slow_left > 0.0
+
+
 ## Called (via signal wiring in main) when a Hunter reaches the Runner.
 func on_caught() -> void:
 	captures += 1
 	global_transform = _spawn_transform
 	velocity = Vector3.ZERO
 	_dash_time_left = 0.0
+	_tether_left = 0.0
+	_slow_left = 0.0
 	_shake = 0.6
 	_codex.reset_resonance()
 	captured.emit(captures)
@@ -188,7 +213,12 @@ func _get_move_direction() -> Vector3:
 
 
 func _current_speed() -> float:
-	return full_form_speed if _codex.is_full_form() else base_speed
+	var speed: float = full_form_speed if _codex.is_full_form() else base_speed
+	if _tether_left > 0.0:
+		speed *= 0.45
+	if _slow_left > 0.0:
+		speed *= _slow_factor
+	return speed
 
 
 func _apply_horizontal_movement(direction: Vector3, delta: float) -> void:
@@ -198,7 +228,14 @@ func _apply_horizontal_movement(direction: Vector3, delta: float) -> void:
 		velocity.z = _dash_direction.z * micro_dash_speed
 		velocity.y = maxf(velocity.y, 0.0)
 		return
+	_slow_left = maxf(_slow_left - delta, 0.0)
 	var target: Vector3 = direction * _current_speed()
+	if _tether_left > 0.0:
+		_tether_left -= delta
+		var pull: Vector3 = _tether_anchor - global_position
+		pull.y = 0.0
+		if pull.length() > 2.0:
+			target += pull.normalized() * 3.5
 	var accel: float = ground_acceleration if is_on_floor() else air_acceleration
 	var horizontal: Vector3 = Vector3(velocity.x, 0.0, velocity.z).move_toward(target, accel * delta)
 	velocity.x = horizontal.x

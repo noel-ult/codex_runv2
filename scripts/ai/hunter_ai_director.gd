@@ -21,6 +21,7 @@ signal site_sweep_dispatched(site: Vector3)
 signal site_sweep_scanning(site: Vector3, active: bool)
 ## A Codex Release was heard; `responders` hunters were dispatched to `world_position`.
 signal release_heard(world_position: Vector3, responders: int)
+signal drone_launched(search_position: Vector3)
 
 @export var hunter_scene: PackedScene
 @export var hunter_count: int = 4
@@ -33,6 +34,10 @@ signal release_heard(world_position: Vector3, responders: int)
 @export var max_investigators_per_echo: int = 2
 @export var capture_grace_period: float = 3.0
 @export var random_seed: int = 7
+
+@export_group("Seeker Drones")
+@export var max_drones: int = 2
+@export var drone_cooldown: float = 20.0
 
 @export_group("Site Sweeps")
 @export var first_sweep_delay: float = 12.0
@@ -54,6 +59,8 @@ var _has_site: bool = false
 var _site: Vector3 = Vector3.ZERO
 var _sweep_timer: float = 0.0
 var _sweeper: HunterAgent
+var _drones: Array[SeekerDrone] = []
+var _drone_cd: float = 0.0
 
 
 func bind_codex(codex: CodexSignalSystem) -> void:
@@ -84,6 +91,7 @@ func spawn_hunters(spawn_points: Array[Vector3], patrol_points: Array[Vector3]) 
 		hunter.runner_touched.connect(_on_runner_touched)
 		hunter.sweep_scan_started.connect(_on_sweep_scan_started)
 		hunter.sweep_finished.connect(_on_sweep_finished)
+		hunter.weapon_report.connect(func(_h: HunterAgent, at: Vector3) -> void: report_signal(at))
 		_hunters.append(hunter)
 	_emit_census()
 
@@ -119,6 +127,7 @@ func get_hunters() -> Array[HunterAgent]:
 
 func _physics_process(delta: float) -> void:
 	_clock += delta
+	_drone_cd -= delta
 	_grace_left = maxf(_grace_left - delta, 0.0)
 	_update_sweeps(delta)
 	_decision_left -= delta
@@ -183,6 +192,7 @@ func _run_decisions() -> void:
 			continue
 		if hunter.state == HunterAgent.State.APEX_PURSUIT:
 			hunter.command_investigate(hunter.last_known_position, -1)
+			_launch_drone(hunter.global_position, hunter.last_known_position)
 			continue
 		var echo: ResidualEcho = _best_echo_for(hunter)
 		if echo != null:
@@ -191,6 +201,22 @@ func _run_decisions() -> void:
 			hunter.command_patrol()
 
 	_emit_census()
+
+
+## Lost contact: send a Seeker Drone to search the last known position.
+func _launch_drone(from: Vector3, search_at: Vector3) -> void:
+	_drones = _drones.filter(func(d: SeekerDrone) -> bool: return is_instance_valid(d))
+	if _drone_cd > 0.0 or _drones.size() >= max_drones:
+		return
+	_drone_cd = drone_cooldown
+	var drone := SeekerDrone.new()
+	drone.name = "SeekerDrone"
+	drone.search_center = search_at
+	add_child(drone)
+	drone.global_position = from + Vector3(0.0, 2.5, 0.0)
+	drone.runner_spotted.connect(report_signal)
+	_drones.append(drone)
+	drone_launched.emit(search_at)
 
 
 func _best_echo_for(hunter: HunterAgent) -> ResidualEcho:

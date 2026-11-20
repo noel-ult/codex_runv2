@@ -13,6 +13,8 @@ signal investigation_finished(hunter: HunterAgent, echo_id: int)
 signal sweep_scan_started(hunter: HunterAgent, site: Vector3)
 signal sweep_finished(hunter: HunterAgent)
 signal runner_touched(hunter: HunterAgent)
+## A Hunter weapon (sonar) located the Runner.
+signal weapon_report(hunter: HunterAgent, world_position: Vector3)
 
 enum State { PATROL, INVESTIGATE_ECHO, APEX_PURSUIT, CHASE_DECOY }
 
@@ -24,6 +26,12 @@ enum State { PATROL, INVESTIGATE_ECHO, APEX_PURSUIT, CHASE_DECOY }
 @export var acceleration: float = 20.0
 @export var turn_speed: float = 8.0
 @export var gravity: float = 22.0
+
+@export_group("Weapons")
+@export var harpoon_range: float = 16.0
+@export var harpoon_cooldown: float = 6.0
+@export var sonar_range: float = 32.0
+@export var sonar_cooldown: float = 14.0
 
 @export_group("Behaviour")
 @export var investigate_linger_time: float = 3.0
@@ -50,6 +58,9 @@ var _sweep_site: Vector3 = Vector3.ZERO
 var _sweep_left: float = 0.0
 var _decoy_check_left: float = 0.0
 var _stun_left: float = 0.0
+var _harpoon_cd: float = 2.0
+var _sonar_cd: float = 4.0
+var _apex_fresh: float = 99.0
 
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
 @onready var _indicator: MeshInstance3D = $StateIndicator
@@ -121,10 +132,12 @@ func command_investigate(target: Vector3, echo_id: int) -> void:
 	_change_state(State.INVESTIGATE_ECHO)
 	_linger_left = investigate_linger_time
 	_set_destination(target)
+	_try_sonar(target)
 
 
 func command_apex_pursuit(target: Vector3) -> void:
 	last_known_position = target
+	_apex_fresh = 0.0
 	current_echo_id = -1
 	_decoy_target = null
 	if state != State.APEX_PURSUIT:
@@ -190,6 +203,9 @@ func is_sweep_scanning() -> bool:
 func _physics_process(delta: float) -> void:
 	_time += delta
 	_repath_left -= delta
+	_apex_fresh += delta
+	_harpoon_cd -= delta
+	_sonar_cd -= delta
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 
@@ -228,6 +244,7 @@ func _physics_process(delta: float) -> void:
 	_animate_rig(delta)
 	_check_contact()
 	_check_decoys(delta)
+	_try_harpoon()
 
 
 func _tick_patrol() -> void:
@@ -390,6 +407,50 @@ func _check_contact() -> void:
 		if body.is_in_group(&"runner"):
 			runner_touched.emit(self)
 			return
+
+
+# --- Weapons -----------------------------------------------------------------------
+
+func _chest() -> Vector3:
+	return global_position + Vector3(0.0, 1.4, 0.0) - global_basis.z * 0.3
+
+
+func _has_line_of_sight(target: Vector3) -> bool:
+	var query := PhysicsRayQueryParameters3D.create(_chest(), target, GeometryKit.WORLD_LAYER | GeometryKit.DOOR_LAYER, [get_rid()])
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+
+## Tether Harpoon at the live broadcast position.
+func _try_harpoon() -> void:
+	if state != State.APEX_PURSUIT or _apex_fresh > 0.4 or _harpoon_cd > 0.0 or _stun_left > 0.0:
+		return
+	var target: Vector3 = last_known_position + Vector3(0.0, 1.0, 0.0)
+	if _chest().distance_to(target) > harpoon_range or not _has_line_of_sight(target):
+		return
+	_harpoon_cd = harpoon_cooldown
+	var harpoon := TetherHarpoon.new()
+	get_parent().add_child(harpoon)
+	harpoon.launch(_chest(), target, self)
+	HunterFX.flash(get_parent(), _chest(), Color(1.0, 0.35, 0.2), 3.0)
+
+
+## Sonar Grenade lobbed at a suspected position.
+func _try_sonar(target: Vector3) -> void:
+	if _sonar_cd > 0.0 or _stun_left > 0.0 or not is_inside_tree():
+		return
+	var distance: float = global_position.distance_to(target)
+	if distance > sonar_range or distance < 4.0:
+		return
+	_sonar_cd = sonar_cooldown
+	var grenade := SonarGrenade.new()
+	get_parent().add_child(grenade)
+	var from: Vector3 = _chest() + Vector3(0.0, 0.3, 0.0)
+	grenade.global_position = from
+	var flight: float = clampf(distance / 18.0, 0.6, 1.6)
+	var gravity_value: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
+	var delta_pos: Vector3 = target - from
+	grenade.linear_velocity = Vector3(delta_pos.x / flight, (delta_pos.y + 0.5 * gravity_value * flight * flight) / flight, delta_pos.z / flight)
+	grenade.runner_revealed.connect(func(at: Vector3) -> void: weapon_report.emit(self, at))
 
 
 ## Alerted hunters shoot apart any decoy emitter they get close to.
