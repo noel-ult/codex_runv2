@@ -8,7 +8,7 @@ Read [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) before changing gameplay or 
 - Verification:
   - `godot --headless --path . --import`
   - `godot --headless --path . --check-only --script <file.gd>` for each script
-  - `godot --headless --fixed-fps 60 --path . --quit-after 600` (runs main.tscn and should print nothing)
+  - `godot --headless --fixed-fps 60 --path . --quit-after 1800` (runs main.tscn past the opening cutscene and should report no errors)
   - For mechanics, run a temporary `extends SceneTree` script with `--script`. Instance `main.tscn` on the first `_physics_process` frame, not in `_initialize` (the root isn't in the tree yet there).
 - Architecture rule: `CodexSignalSystem` and `PlayerController` must never reference Hunter AI. All cross-system wiring lives in `scripts/main.gd`.
 - Repo lives on an exFAT drive (`core.fileMode=false`).

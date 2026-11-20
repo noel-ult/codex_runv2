@@ -7,6 +7,7 @@ Codex Run is a third-person stealth heist in an open city. As the Runner, steal 
 ## Contents
 
 - [Run locally](#run-locally)
+- [Opening and judging demo](#opening-and-judging-demo)
 - [Play the heist](#play-the-heist)
 - [Controls and HUD](#controls-and-hud)
 - [Stealth and security](#stealth-and-security)
@@ -27,11 +28,15 @@ godot --path .
 
 In the editor, import `project.godot` and press **F5**. The game starts in `res://scenes/main.tscn`. The import step generates the local `.godot/` cache required by GDScript’s `class_name` types.
 
+## Opening and judging demo
+
+The 23-second opening cutscene follows the Runner into Meridian Labs, through first contact with the Codex, and into the aftermath. Press **Space** or **Esc** to skip. The game restores your checkpoint after the intro ends.
+
+![The Runner approaching the Codex in Meridian Labs during the opening cutscene](docs/screenshots/intro.jpg)
+
+To preview the ending, press **Ctrl+Shift+F10** during active on-foot gameplay. The demo moves the Runner to the live relay and runs a six-second upload with capture disabled. The completion screen prompts you to press **R** to play again. Demo progress cannot be saved, and **R** clears the existing checkpoint.
+
 ## Play the heist
-
-The 23-second opening cutscene follows the Runner into Meridian Labs, through first contact with the Codex, and into the aftermath. Press **Space** or **Esc** to skip to gameplay.
-
-**Judging shortcut:** Press **Ctrl + Shift + F10** while on foot during gameplay to jump to the live relay, watch a six-second upload, and see the transmission finale. Press **R** to start a fresh run and clear any credential checkpoint.
 
 ### Main mission
 
@@ -45,9 +50,17 @@ You carry the **Codex**. Send it to safety through the Hunters’ own uplink.
 
 ### Checkpoint and capture
 
-Press **Ctrl+S** after copying the packet, opening the core, breaching the database, or finishing the upload to save that milestone. Decoding the credentials still saves automatically. The checkpoint records completed objectives. An upload in progress resumes from the database breach if that milestone was saved.
+Decoding the credentials at Storage 07 saves automatically. Press **Ctrl+S** to save the latest completed objective at any of the following points.
 
-Capture restores your saved objective and preserves gear, upgrades, and credits. After decoding, you return to Storage 07, where the sheltered room protects you from Hunter contact. Relaunching restores the mission checkpoint with starting inventory and credits, plus the decode salvage reward if earned. Press **R** or confirm **Restart Run** to clear the checkpoint.
+| Milestone | Objective on resume |
+| --- | --- |
+| Suit packet copied | Take the packet to Storage 07 and decode it. |
+| Credentials decoded | Head to Meridian Labs and open the core. |
+| Core opened | Breach the Main Hunter Database. |
+| Database breached | Head to the live relay and start the upload from zero. |
+| Upload complete | Return to the completion screen. |
+
+Capture ends any active hack or upload and restores the saved objective. Before decoding, you respawn at the original starting point. After decoding, you respawn inside Storage 07 with your credentials. Gear, upgrades and credits survive capture. Relaunching restores the objective and live relay selection with starting inventory and credits, plus the decode salvage reward if earned. Press **R** or confirm **Restart Run** to clear the checkpoint.
 
 ### Terminal minigames
 
@@ -82,7 +95,7 @@ Cipher Recovery uses Wordle-style clues on each submitted tile. **Green** means 
 | Tab | Toggle the objective log |
 | Ctrl+S | Save the latest completed mission objective |
 | R | Restart Run (clears the mission checkpoint) |
-| Esc | Pause or resume play. Disconnect from a terminal or leave the workbench when one is open |
+| Esc | Pause or resume play, skip the intro, or leave the open terminal, workbench or shop |
 
 Open **Esc → Controls** to check the current bindings for gameplay, terminal minigames, and the workbench. **Esc → Operators** lets you inspect the Runner, Hunter, Civilian, and Technician in 3D. Drag the model to rotate it, or use the left and right arrows while the preview has focus.
 
@@ -229,13 +242,15 @@ The marked **SUPPLIES** counter sits on the sidewalk beside Meridian Labs. Hold 
 | `scripts/player/`, `scripts/systems/` and `scripts/gadgets/` | Player movement, stances, Codex signals, gadget inventory and deployables |
 | `scripts/ai/` and `scripts/facility/` | Hunter patrol and pursuit, Hunter equipment, lab layout and security |
 | `scripts/mission/`, `scripts/interaction/` and `scripts/hacking/` | Objective state, checkpoint, relay transmission, field contracts, interaction holds and minigames |
-| `scripts/economy/` and `scripts/ui/` | Credits, courier deliveries, HUD, menus, workbench and shop |
+| `scripts/economy/` and `scripts/ui/` | Credits, courier deliveries, HUD, menus, workbench, shop and opening cutscene |
 | `shaders/` | Surface materials, CRT effects, operator stage lighting and shared shader code |
 
 ### Runtime design
 
 - **Procedural city:** `GeometryKit`, `BuildingFactory`, `PropFactory` and `VehicleModel` assemble the world. Compatible static meshes are batched before runtime navigation baking. Collision bodies remain available for physics and navigation.
 - **Procedural characters:** `HumanoidRig` lofts skinned surfaces into an `ArrayMesh` and drives poses with a 17-bone `Skeleton3D`. Seeded outfits let disguises reproduce the appearance of the copied NPC.
+- **Opening cutscene:** `IntroCutscene` uses an isolated `SubViewport` for four procedural camera shots. `main.gd` pauses the world during playback and starts the mission when the cutscene finishes or is skipped.
+- **Checkpoint storage:** `MissionDirector` writes the saved objective and relay seed to `user://mission_checkpoint.cfg`. It restores the mission state and markers on startup and after capture.
 - **Signals and interaction:** `PlayerController` and `CodexSignalSystem` avoid Hunter AI dependencies. `main.gd` routes Codex and mission position reports to the Hunter director. Gadget effects use groups such as `electronics` and `emp_receivers` with methods such as `disable_for()` and `apply_emp()`.
 - **Environment:** `TimeOfDay` controls the sky, lighting, fog and `night_factor`. `WeatherSystem` controls rain and `wetness`. Security reads gameplay visibility and weather conditions from `WorldConditions`.
 - **Physics layers:** 1 world, 2 Runner, 3 Hunters, 4 vehicles, 5 triggers, 6 doors, 7 electronics and 8 NPCs.
@@ -249,7 +264,7 @@ godot --headless --path . --import
 for script in $(rg --files scripts -g '*.gd'); do
   godot --headless --path . --check-only --script "$script" || exit 1
 done
-godot --headless --fixed-fps 60 --path . --quit-after 600
+godot --headless --fixed-fps 60 --path . --quit-after 1800
 ```
 
 See the [project guide](docs/PROJECT_GUIDE.md) for the detailed system map, state transitions and gameplay test harness. See [AGENTS.md](AGENTS.md) for repository-specific editing and engine notes.

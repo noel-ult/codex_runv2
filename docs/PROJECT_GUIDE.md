@@ -23,7 +23,7 @@ godot --headless --path . --import
 for script in $(rg --files scripts -g '*.gd'); do
   godot --headless --path . --check-only --script "$script" || exit 1
 done
-godot --headless --fixed-fps 60 --path . --quit-after 600
+godot --headless --fixed-fps 60 --path . --quit-after 1800
 ```
 
 For mechanic checks, use a temporary `extends SceneTree` harness and instantiate the main scene on the first physics frame. Exercise real signals and interaction entry points. The terminal minigames can be driven by setting their private state for deterministic tests. When skipping a hold with `Interactable.complete(player)`, remember it bypasses range and requirement checks.
@@ -32,17 +32,21 @@ Render visual checks through a 1280×720 `SubViewport` sharing the main world's 
 
 ## Current gameplay
 
+The opening cinematic runs for 23 seconds in four shots. It follows the Runner into containment, shows the first contact with the Codex, and ends with the lab alarm. Space or Escape skips to gameplay.
+
 1. Approach the rear suit port of an unaware, patrolling Hunter and hold E to copy an encrypted packet. Copying leaves movement available and starts no minigame.
 2. Carry the packet to Storage 07 on the west edge. Follow the decoder marker and hold E at the HunterNet decoder inside the safehouse. Win Signal Lock to recover lab credentials and automatically save the credential checkpoint. Escape cancels decoding and retains the packet for another attempt.
 3. Infiltrate Meridian Signal Labs in the northeast block and authenticate at the HunterNet core door. A technician disguise opens staff entrances, and the other infiltration routes remain available.
 4. Breach the database through Signal Lock, Firewall Override, and Cipher Recovery. Firewall Override shows three number prompts to answer with keys 1–3. Wrong answers raise trace. Trace can abort the breach and temporarily lock the terminal. Success reveals the live relay and starts lockdown.
-5. Reach that relay and transmit within its radius for 50 seconds.
+5. Activate the live relay and stay within 16 meters for 50 seconds of accumulated transmission time. Leaving the radius pauses progress.
 
 Cipher Recovery gives a clue on each submitted tile. Green marks an exact match, amber marks a glyph that belongs in another slot, and dim marks an unmatched tile. The secret uses distinct glyphs, and repeated guesses of the same glyph can match it only once per row. Exact matches take priority.
 
 After the database breach, an optional violet marker identifies a dormant relay. A false handshake there can divert up to two Hunters for 24 seconds. The opportunity closes when the real transmission starts and resets on capture.
 
 Capture restores the latest saved objective and clears the active hack and any unfinished upload. Gear, credits, and prep upgrades stay with the Runner during capture. After decoding, the Runner respawns at Storage 07.
+
+For a presentation, press Ctrl+Shift+F10 while on foot during gameplay. The shortcut moves the Runner to the live relay, runs a six-second upload with the standard beam and progress display, then shows the ending. The preview leaves the checkpoint intact.
 
 Credential decode auto-saves. Ctrl+S saves the packet, core access, breach or completed transmission milestone. Relaunch restores objective state with starting inventory and credits, plus the decode salvage reward if earned. Restart Run clears the checkpoint.
 
@@ -65,7 +69,7 @@ Field dispatch offers two replayable contracts at any hour. Recover a marked cas
 | `scripts/player/player_controller.gd` | Movement, camera, stances, interaction holds, disguises, vehicle occupancy and respawn |
 | `scripts/systems/codex_signal_system.gd` | Resonance, form, ignition, Releases, masking and decoy broadcasts |
 | `scripts/systems/residual_echo.gd` | Visible fading position echoes |
-| `scripts/mission/mission_director.gd` | Packet/decode state, credential checkpoint, lab access, breach, lockdown, transmission and capture reset |
+| `scripts/mission/mission_director.gd` | Packet/decode state, mission checkpoints, lab access, breach, lockdown, transmission and capture reset |
 | `scripts/mission/field_contracts.gd` | Field dispatch kiosks, case deliveries, timed receiver surveys and contract signals |
 | `scripts/mission/uplink_station.gd` | Relay geometry, interaction, reveal/handshake/transmission visuals and reset |
 | `scripts/interaction/interactable.gd` | World interaction range, requirements, holds and completion signals |
@@ -76,7 +80,8 @@ Field dispatch offers two replayable contracts at any hour. Recover a marked cas
 | `scripts/npc/npc_walker.gd` | Pedestrians, lab technicians, routes and ID copying |
 | `scripts/gadgets/` | Gadget belt, jammer aim, EMPs, decoys, electronics contracts and pickups |
 | `scripts/hacking/` | Terminal sessions and the three minigames, with shared retro drawing/input helpers |
-| `scripts/ui/hud.gd` | Objectives, heading tape, projected markers, threat, stance, aim lock and resource display |
+| `scripts/ui/hud.gd` | Objectives, heading tape, projected markers, threat, resource display and transmission finale |
+| `scripts/ui/intro_cutscene.gd` | Procedural containment set, four-shot camera sequence, caption timing and skip input |
 | `scripts/ui/pause_menu.gd`, `operator_preview.gd` | Pause/controls, restart confirmation and isolated 3D character inspection |
 | `scripts/ui/prep_station_ui.gd` | Salvage purchases, fabrication, upgrades and rest UI |
 | `scripts/ui/supply_shop_ui.gd` | Credit shop catalog UI, keyboard/mouse selection and purchase feedback |
@@ -97,9 +102,13 @@ Field dispatch offers two replayable contracts at any hour. Recover a marked cas
 | `shaders/` | Procedural surfaces, suit fabric, CRT display and operator stage floor |
 | `README.md` | Player-facing mission rules, controls and project overview |
 
-Every imported resource UID has a neighboring `.uid` file. `.godot/` contains generated local editor/import cache. The drive uses exFAT and Git has `core.fileMode=false`.
+GDScript resource UIDs live in neighboring `.uid` files. README captures live in `docs/screenshots/`. `.godot/` contains generated local editor/import cache. The drive uses exFAT and Git has `core.fileMode=false`.
 
 ## Important state transitions
+
+- Main pauses the mission world during the intro. The cinematic runs in its own 3D viewport and emits `finished` on skip or natural completion. Main then restores player input and HUD visibility and starts the mission.
+- `user://mission_checkpoint.cfg` stores the latest saved milestone and relay seed. Startup accepts the earlier credential-only save format. Restoring core access reopens the authenticated door. Restoring the database breach reveals the same relay and reapplies lockdown after navigation synchronizes. Restoring a completed upload shows the finale.
+- The presentation shortcut uses the normal transmission progress and completion path with a six-second duration and suppresses capture for the preview. Checkpoint writes are disabled for that run.
 
 - Hunter port extraction emits `suit_packet_copied()`. The mission sets `has_suit_packet`, disables further extraction, enables the decoder, changes objective text and exposes its waypoint.
 - The hideout decoder is built disabled. `main.gd` supplies it to the mission with `bind_decoder()` and supplies `hideout.protects_runner.bind(player)` to the AI director and the player's generic `shelter_check` callable.

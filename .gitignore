@@ -10,3 +10,6 @@ export_presets.cfg
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Godot import descriptors for documentation screenshots
+/docs/screenshots/*.jpg.import
