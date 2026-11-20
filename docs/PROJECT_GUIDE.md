@@ -38,6 +38,8 @@ Render visual checks through a 1280×720 `SubViewport` sharing the main world's 
 4. Breach the database through Signal Lock, Firewall Override, and Cipher Recovery. Firewall Override shows three number prompts to answer with keys 1–3. Wrong answers raise trace. Trace can abort the breach and temporarily lock the terminal. Success reveals the live relay and starts lockdown.
 5. Reach that relay and transmit within its radius for 30 seconds.
 
+Cipher Recovery gives a clue on each submitted tile. Green marks an exact match, amber marks a glyph that belongs in another slot, and dim marks an unmatched tile. The secret uses distinct glyphs, and repeated guesses of the same glyph can match it only once per row. Exact matches take priority.
+
 After the database breach, an optional violet marker identifies a dormant relay. A false handshake there can divert up to two Hunters for 24 seconds. The opportunity closes when the real transmission starts and resets on capture.
 
 Capture before mission completion closes any active hack and resets the alert configuration and objectives. Before the decode it returns the Runner to the original spawn and resets the packet-copy objective. After the decode it returns the Runner to Storage 07 with lab credentials and resets core access, database cipher, relay reveal and transmission progress. Gear, credits and purchased prep upgrades stay with the player. The credential decode awards salvage once per run.

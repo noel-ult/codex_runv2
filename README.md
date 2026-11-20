@@ -55,7 +55,7 @@ The pause menu’s **Graphics** selector saves your choice across runs. **Detail
 Terminal minigames:
 - **Signal Lock:** A/D tune frequency and W/S tune phase. Match the drifting carrier and hold the lock.
 - **Firewall Override:** Follow three prompts by pressing the displayed number key (1, 2, or 3). A wrong key adds trace.
-- **Cipher:** A/D select a slot, W/S change the glyph, Enter submits. ● = right glyph in the right slot, ○ = right glyph in the wrong slot. The code has no repeated glyphs, and each clue counts a glyph only once.
+- **Cipher:** A/D select a slot, W/S change the glyph, Enter submits. Each submitted tile shows its own clue. Green means the glyph is in the right slot, amber means it belongs in another slot, and dim means it is unmatched. The secret uses distinct glyphs. Each secret glyph can match only one tile per guess, with exact matches scored first.
 
 ## Day, night and weather
 

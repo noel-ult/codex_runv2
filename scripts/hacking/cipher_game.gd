@@ -1,11 +1,12 @@
 class_name CipherGame
 extends RetroMinigame
-## Mastermind-style key recovery: deduce the 4-glyph database cipher. A/D select a slot,
-## W/S cycle glyphs, ENTER submits. ● = right glyph in the right slot, ○ = right glyph elsewhere.
+## Deduce the four-glyph database cipher using feedback on each submitted tile.
 ## Every wrong guess leaks trace; running out of attempts fails the stage.
 
 const GLYPHS: PackedStringArray = ["3", "7", "A", "C", "E", "F"]
 const SLOTS: int = 4
+
+enum TileFeedback { UNMATCHED, MISPLACED, EXACT }
 
 var max_attempts: int = 8
 
@@ -13,7 +14,7 @@ var _code: PackedInt32Array = PackedInt32Array()
 var _guess: PackedInt32Array = PackedInt32Array([0, 1, 2, 3])
 var _cursor: int = 0
 var _history: Array[PackedInt32Array] = []
-var _feedback: Array[Vector2i] = []
+var _feedback: Array[PackedByteArray] = []
 
 
 func title() -> String:
@@ -21,7 +22,7 @@ func title() -> String:
 
 
 func help_text() -> String:
-	return "A/D  slot    W/S  glyph    ENTER  submit    ● exact  ○ misplaced    no repeats"
+	return "A/D  slot    W/S  glyph    ENTER  submit    code has no repeats"
 
 
 func _setup() -> void:
@@ -55,23 +56,25 @@ func key_pressed(keycode: Key) -> void:
 
 func _submit() -> void:
 	var exact: int = 0
-	var partial: int = 0
+	var feedback := PackedByteArray()
+	feedback.resize(SLOTS)
 	var matched: PackedByteArray = PackedByteArray()
 	matched.resize(SLOTS)
 	for i: int in SLOTS:
 		if _guess[i] == _code[i]:
 			exact += 1
+			feedback[i] = TileFeedback.EXACT
 			matched[i] = 1
 	for i: int in SLOTS:
 		if _guess[i] == _code[i]:
 			continue
 		for j: int in SLOTS:
 			if matched[j] == 0 and _guess[i] == _code[j]:
-				partial += 1
+				feedback[i] = TileFeedback.MISPLACED
 				matched[j] = 1
 				break
 	_history.append(_guess.duplicate())
-	_feedback.append(Vector2i(exact, partial))
+	_feedback.append(feedback)
 	if exact == SLOTS:
 		_succeed()
 		return
@@ -84,30 +87,31 @@ func _draw() -> void:
 	text(Vector2(20.0, 28.0), "ATTEMPTS %d / %d" % [_history.size(), max_attempts], 16, PHOSPHOR)
 	draw_timer(Vector2(size.x - 160.0, 28.0))
 	var cell: float = 46.0
-	var left: float = size.x * 0.5 - (SLOTS * cell + 160.0) * 0.5
+	var left: float = (size.x - SLOTS * cell + 8.0) * 0.5
 	var y: float = 50.0
 	for row: int in max_attempts:
 		var row_y: float = y + row * 38.0
-		var current: bool = row == _history.size()
+		var current: bool = row == _history.size() and not finished
 		for i: int in SLOTS:
 			var rect := Rect2(Vector2(left + i * cell, row_y), Vector2(cell - 8.0, 30.0))
 			var glyph: String = ""
 			var color: Color = FAINT
 			if row < _history.size():
 				glyph = GLYPHS[_history[row][i]]
-				color = PHOSPHOR
+				match _feedback[row][i]:
+					TileFeedback.EXACT:
+						color = PHOSPHOR
+					TileFeedback.MISPLACED:
+						color = AMBER
+					_:
+						color = Color("82958a")
+				draw_rect(rect, Color(color, 0.18))
 			elif current:
 				glyph = GLYPHS[_guess[i]]
 				color = AMBER if i == _cursor else PHOSPHOR
 			frame(rect, color if current or row < _history.size() else FAINT, 2.0 if current and i == _cursor else 1.0)
 			text(rect.position + Vector2(0.0, 23.0), glyph, 20, color, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x)
-		if row < _feedback.size():
-			var fb: Vector2i = _feedback[row]
-			for p: int in SLOTS:
-				var at := Vector2(left + SLOTS * cell + 20.0 + p * 18.0, row_y + 15.0)
-				if p < fb.x:
-					draw_circle(at, 6.0, PHOSPHOR)
-				elif p < fb.x + fb.y:
-					draw_arc(at, 6.0, 0.0, TAU, 16, AMBER, 2.0)
-				else:
-					draw_arc(at, 6.0, 0.0, TAU, 16, FAINT, 1.0)
+	var legend_y: float = y + max_attempts * 38.0 + 26.0
+	text(Vector2(size.x * 0.5 - 180.0, legend_y), "GREEN  Right slot", 15, PHOSPHOR)
+	text(Vector2(size.x * 0.5 - 10.0, legend_y), "AMBER  Wrong slot", 15, AMBER)
+	text(Vector2(size.x * 0.5 - 180.0, legend_y + 24.0), "GRAY   No match", 15, Color("82958a"))
