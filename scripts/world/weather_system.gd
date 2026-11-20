@@ -15,26 +15,26 @@ const NAMES: PackedStringArray = ["CLEAR", "OVERCAST", "FOG", "DRIZZLE", "STORM"
 static func profile(weather: Kind) -> PackedFloat32Array:
 	match weather:
 		Kind.CLEAR:
-			return PackedFloat32Array([0.0, 0.0, 0.1, 0.15, 1.0, 0.0])
+			return PackedFloat32Array([0.0, 0.0, 0.12, 0.22, 1.0, 0.0])
 		Kind.OVERCAST:
-			return PackedFloat32Array([0.0, 0.004, 0.75, 0.3, 0.92, 0.0])
+			return PackedFloat32Array([0.0, 0.0015, 0.58, 0.3, 0.96, 0.0])
 		Kind.FOG:
-			return PackedFloat32Array([0.0, 0.03, 0.55, 0.45, 0.6, 0.0])
+			return PackedFloat32Array([0.0, 0.012, 0.48, 0.38, 0.82, 0.0])
 		Kind.DRIZZLE:
-			return PackedFloat32Array([0.45, 0.006, 0.8, 0.75, 0.85, 0.0])
-	return PackedFloat32Array([1.0, 0.01, 1.0, 1.0, 0.7, 1.0])
+			return PackedFloat32Array([0.35, 0.002, 0.62, 0.68, 0.93, 0.0])
+	return PackedFloat32Array([0.85, 0.006, 0.88, 0.95, 0.8, 1.0])
 
-@export var start_kind: Kind = Kind.DRIZZLE
+@export var start_kind: Kind = Kind.CLEAR
 @export var min_duration: float = 70.0
 @export var max_duration: float = 150.0
 @export var blend_time: float = 22.0
 
-var kind: Kind = Kind.DRIZZLE
-var rain: float = 0.45
-var fog: float = 0.006
-var cloud: float = 0.8
-var wetness: float = 0.75
-var visibility: float = 0.85
+var kind: Kind = Kind.CLEAR
+var rain: float = 0.0
+var fog: float = 0.0
+var cloud: float = 0.12
+var wetness: float = 0.22
+var visibility: float = 1.0
 var lightning: float = 0.0
 
 var _target: PackedFloat32Array
@@ -42,6 +42,8 @@ var _left: float = 90.0
 var _strike_left: float = 6.0
 var _rng := RandomNumberGenerator.new()
 var _rain_node: RainWeather
+var _published_wetness: float = -1.0
+var _published_rain: float = -1.0
 
 
 func setup(rain_node: RainWeather) -> void:
@@ -90,9 +92,12 @@ func _process(delta: float) -> void:
 			_strike_left = _rng.randf_range(5.0, 14.0)
 			lightning = 1.0
 			lightning_struck.emit()
-	if _rain_node != null:
+	if _rain_node != null and not is_equal_approx(rain, _published_rain):
 		_rain_node.set_intensity(rain)
-	RenderingServer.global_shader_parameter_set(&"wetness", wetness)
+		_published_rain = rain
+	if not is_equal_approx(wetness, _published_wetness):
+		RenderingServer.global_shader_parameter_set(&"wetness", wetness)
+		_published_wetness = wetness
 	WorldConditions.weather_name = NAMES[int(kind)]
 	WorldConditions.drones_grounded = kind == Kind.STORM and rain > 0.6
 
@@ -101,7 +106,7 @@ func _pick_next() -> Kind:
 	var h: float = WorldConditions.hour
 	var weights := PackedFloat32Array([3.0, 2.0, 1.0, 2.5, 1.0])
 	if h >= 4.5 and h < 9.5:
-		weights[int(Kind.FOG)] = 5.0
+		weights[int(Kind.FOG)] = 1.6
 	if h >= 17.0 or h < 2.0:
 		weights[int(Kind.DRIZZLE)] = 3.5
 		weights[int(Kind.STORM)] = 1.6

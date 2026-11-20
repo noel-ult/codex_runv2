@@ -15,8 +15,8 @@ signal sweep_finished(hunter: HunterAgent)
 signal runner_touched(hunter: HunterAgent)
 ## A Hunter weapon (sonar) located the Runner.
 signal weapon_report(hunter: HunterAgent, world_position: Vector3)
-## The Runner plugged into this Hunter's suit port (HunterNet access point).
-signal suit_port_accessed(hunter: HunterAgent, actor: Node3D)
+## A Runner copied the suit packet and can leave with it.
+signal suit_packet_extracted()
 
 enum State { PATROL, INVESTIGATE_ECHO, APEX_PURSUIT, CHASE_DECOY }
 
@@ -45,6 +45,7 @@ var state: State = State.PATROL
 var current_echo_id: int = -1
 var last_known_position: Vector3 = Vector3.ZERO
 
+var _regular_patrol_points: Array[Vector3] = []
 var _patrol_points: Array[Vector3] = []
 var _decoy_target: Node3D
 var _linger_left: float = 0.0
@@ -63,7 +64,6 @@ var _stun_left: float = 0.0
 var _harpoon_cd: float = 2.0
 var _sonar_cd: float = 4.0
 var _apex_fresh: float = 99.0
-var _diagnostic: bool = false
 var _suit_port: Interactable
 
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
@@ -83,21 +83,22 @@ func _ready() -> void:
 	add_to_group(Electronics.EMP_GROUP)
 	_suit_port = Interactable.new()
 	_suit_port.name = "SuitPort"
-	_suit_port.prompt = "Jack into the Hunter's suit port (HunterNet)"
-	_suit_port.hold_time = 1.2
+	_suit_port.prompt = "Copy the HunterNet suit packet"
+	_suit_port.hold_time = 0.7
 	_suit_port.radius = 1.9
 	_suit_port.position = Vector3(0.0, 1.3, 0.35)
 	_suit_port.requirement = _port_accessible
 	_suit_port.requirement_hint = "Only from behind an unaware (green) Hunter"
 	add_child(_suit_port)
-	_suit_port.completed.connect(func(_i: Interactable, actor: Node3D) -> void: suit_port_accessed.emit(self, actor))
+	_suit_port.completed.connect(_on_suit_port_completed)
 	_apply_state_visual()
 
 
 func setup(id: int, patrol_points: Array[Vector3], random_seed: int) -> void:
 	hunter_id = id
 	name = "Hunter%d" % id
-	_patrol_points = patrol_points
+	_regular_patrol_points = patrol_points
+	_patrol_points = _regular_patrol_points.duplicate()
 	_rng.seed = random_seed
 
 
@@ -136,6 +137,18 @@ func command_patrol() -> void:
 	_decoy_target = null
 	_change_state(State.PATROL)
 	_needs_patrol_target = true
+
+
+## Discard the alarm route, including a sweep already in progress while in PATROL.
+func reset_mission_alert() -> void:
+	_end_sweep()
+	_patrol_points = _regular_patrol_points.duplicate()
+	command_patrol()
+	current_echo_id = -1
+	last_known_position = Vector3.ZERO
+	_needs_patrol_target = true
+	_stuck_time = 0.0
+	velocity = Vector3(0.0, velocity.y, 0.0)
 
 
 func command_investigate(target: Vector3, echo_id: int) -> void:
@@ -187,26 +200,29 @@ func is_stunned() -> bool:
 
 
 func _port_accessible(actor: Node3D) -> bool:
-	if state != State.PATROL or _stun_left > 0.0 or _diagnostic:
+	if not actor.is_in_group(&"runner") or state != State.PATROL or is_stunned():
 		return false
 	var to_actor: Vector3 = actor.global_position - global_position
 	to_actor.y = 0.0
 	return (-global_basis.z).dot(to_actor.normalized()) < -0.3
 
 
-## Suit diagnostics: the Hunter freezes (unaware) while the Runner hacks it.
-func begin_diagnostic(seconds: float) -> void:
-	_diagnostic = true
-	_stun_left = maxf(_stun_left, seconds)
-	velocity = Vector3(0.0, velocity.y, 0.0)
+func _on_suit_port_completed(port: Interactable, actor: Node3D) -> void:
+	if port.is_available_for(actor) and port.meets_requirement(actor):
+		suit_packet_extracted.emit()
 
 
-func end_diagnostic() -> void:
-	_diagnostic = false
-	_stun_left = minf(_stun_left, 0.8)
+func set_suit_extraction_enabled(enabled: bool) -> void:
+	_suit_port.enabled = enabled
 
 
 func add_patrol_points(points: Array[Vector3]) -> void:
+	_regular_patrol_points.append_array(points)
+	_patrol_points.append_array(points)
+
+
+func set_lockdown_patrol_points(points: Array[Vector3]) -> void:
+	_patrol_points = _regular_patrol_points.duplicate()
 	_patrol_points.append_array(points)
 
 
@@ -253,15 +269,10 @@ func _physics_process(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, 0.0, 30.0 * delta)
 		move_and_slide()
 		var flicker: bool = fmod(_stun_left, 0.3) < 0.15
-		if _diagnostic:
-			_rig.set_accent(Color(0.9, 0.7, 0.2) if fmod(_stun_left, 1.0) < 0.5 else Color(0.2, 0.15, 0.05), 2.0)
-			_rig.crouch_amount = 0.15
-		else:
-			_rig.set_accent(Color(0.5, 0.6, 1.0) if flicker else Color(0.05, 0.05, 0.08), 3.0)
-			_rig.crouch_amount = 0.6
+		_rig.set_accent(Color(0.5, 0.6, 1.0) if flicker else Color(0.05, 0.05, 0.08), 3.0)
+		_rig.crouch_amount = 0.6
 		_rig.animate(Vector3.ZERO, is_on_floor(), delta)
 		if _stun_left <= 0.0:
-			_diagnostic = false
 			_rig.crouch_amount = 0.0
 			_apply_state_visual()
 		return

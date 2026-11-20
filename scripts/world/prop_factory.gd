@@ -45,13 +45,38 @@ static func tree(parent: Node3D, base: Vector3, rng: RandomNumberGenerator) -> v
 	GeometryKit.tilted_box(root, Vector3(-0.3, height - 0.2, 0.2), Vector3(0.08, 1.0, 0.08), Vector3(25.0, 0.0, 35.0), bark)
 	var leaves := MaterialLibrary.foliage()
 	var clusters: int = 7
+	var crowns: Array[Transform3D] = []
 	for i: int in clusters:
 		var angle: float = TAU * float(i) / float(clusters) + rng.randf_range(-0.3, 0.3)
 		var r: float = rng.randf_range(0.6, 1.2)
 		var y: float = height + rng.randf_range(-0.2, 1.1)
 		var size: float = rng.randf_range(0.8, 1.25)
-		GeometryKit.sphere(root, Vector3(cos(angle) * r, y, sin(angle) * r), size, leaves, Vector3(1.0, 0.8, 1.0))
-	GeometryKit.sphere(root, Vector3(0.0, height + 1.2, 0.0), 1.2, leaves, Vector3(1.0, 0.85, 1.0))
+		var radial: Vector3 = Vector3(cos(angle), 0.0, sin(angle))
+		var crown: Vector3 = radial * r + Vector3.UP * y
+		crowns.append(Transform3D(Basis.from_scale(Vector3(0.91, 0.74, 1.0) * size), crown))
+		if i % 2 == 0:
+			var fork: Vector3 = Vector3.UP * (height - 1.05)
+			var branch: MeshInstance3D = GeometryKit.cylinder(root, (crown + fork) * 0.5, 0.035, 0.082, crown.distance_to(fork), bark, 8)
+			branch.quaternion = Quaternion(Vector3.UP, (crown - fork).normalized())
+			var tip: Vector3 = crown + radial * 0.36 + Vector3.UP * 0.47
+			crowns.append(Transform3D(Basis.from_scale(Vector3(0.88, 0.81, 1.0) * size * 0.57), tip))
+	crowns.append(Transform3D(Basis.from_scale(Vector3(1.16, 1.0, 1.16)), Vector3(0.0, height + 1.2, 0.0)))
+	var sphere := SphereMesh.new()
+	sphere.radius = 1.0
+	sphere.height = 2.0
+	sphere.radial_segments = 22
+	sphere.rings = 11
+	sphere.material = leaves
+	var batch := MultiMesh.new()
+	batch.transform_format = MultiMesh.TRANSFORM_3D
+	batch.mesh = sphere
+	batch.instance_count = crowns.size()
+	for i: int in crowns.size():
+		batch.set_instance_transform(i, crowns[i])
+	var canopy := MultiMeshInstance3D.new()
+	canopy.multimesh = batch
+	canopy.extra_cull_margin = 0.35
+	root.add_child(canopy)
 
 
 static func bench(parent: Node3D, base: Vector3, yaw: float) -> void:
@@ -137,7 +162,20 @@ static func ac_unit(parent: Node3D, base: Vector3, yaw: float) -> void:
 	parent.add_child(root)
 	var box := GeometryKit.solid_box(root, Vector3(0.0, 0.6, 0.0), Vector3(1.8, 1.2, 1.2), metal)
 	box.set_instance_shader_parameter(&"paint_color", Color(0.55, 0.56, 0.55))
-	GeometryKit.cylinder(root, Vector3(0.0, 1.21, 0.0), 0.45, 0.45, 0.02, MaterialLibrary.coated(Color(0.05, 0.05, 0.05), 0.5, 0.6), 18)
+	var rim: StandardMaterial3D = MaterialLibrary.coated(Color(0.12, 0.13, 0.14), 0.68, 0.48)
+	var blade: StandardMaterial3D = MaterialLibrary.coated(Color(0.32, 0.34, 0.35), 0.62, 0.45)
+	GeometryKit.cylinder(root, Vector3(0.0, 1.21, 0.0), 0.45, 0.45, 0.02, rim, 18)
+	var fan := Node3D.new()
+	fan.position.y = 1.231
+	fan.add_to_group(&"animated_world_props")
+	root.add_child(fan)
+	for index: int in 3:
+		var angle: float = TAU * float(index) / 3.0
+		var fin: MeshInstance3D = GeometryKit.mesh_box(fan, Vector3(sin(angle) * 0.21, 0.0, cos(angle) * 0.21), Vector3(0.13, 0.025, 0.28), blade, false)
+		fin.rotation.y = angle + 0.25
+	GeometryKit.cylinder(fan, Vector3.ZERO, 0.12, 0.12, 0.043, blade, 12)
+	var spin: Tween = fan.create_tween().set_loops()
+	spin.tween_property(fan, "rotation:y", TAU, 0.95).from(0.0)
 	GeometryKit.mesh_box(root, Vector3(1.0, 0.25, 0.0), Vector3(0.2, 0.15, 0.15), MaterialLibrary.coated(Color(0.4, 0.4, 0.4), 0.9, 0.3))
 
 

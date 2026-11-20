@@ -83,7 +83,7 @@ func text(at: Vector2, value: String, font_size: int = 16, color: Color = PHOSPH
 
 
 func frame(rect: Rect2, color: Color = DIM, width: float = 1.0) -> void:
-	draw_rect(rect, color, false, width)
+	draw_rect(rect, color, false, width, true)
 
 
 func draw_timer(at: Vector2) -> void:

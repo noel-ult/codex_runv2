@@ -12,6 +12,7 @@ const PHASE_NIGHT: StringName = &"night"
 const PHASE_DAWN: StringName = &"dawn"
 const PHASE_DAY: StringName = &"day"
 const PHASE_DUSK: StringName = &"dusk"
+const ENVIRONMENT_INTERVAL: float = 0.1
 
 @export var start_hour: float = 21.5
 @export var night_seconds_per_hour: float = 50.0
@@ -29,11 +30,13 @@ var _weather: WeatherSystem
 var _lamps_on: bool = true
 var _bulb: StandardMaterial3D
 var _tick_left: float = 0.0
+var _environment_left: float = 0.0
 var _moon_energy: float = 0.7
 
 
 func setup(world_environment: WorldEnvironment, moon: DirectionalLight3D, weather: WeatherSystem) -> void:
 	_env = world_environment.environment
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	_sky = _env.sky.sky_material as ProceduralSkyMaterial
 	_moon = moon
 	_moon_energy = moon.light_energy
@@ -47,13 +50,15 @@ func setup(world_environment: WorldEnvironment, moon: DirectionalLight3D, weathe
 	_bulb = MaterialLibrary.emissive(Color(1.0, 0.78, 0.5), 6.0)
 	hour = start_hour
 	phase = _phase_for(hour)
-	_apply(0.0)
+	_apply_environment()
+	_publish_conditions()
 
 
 ## Jumps the clock forward to `target_hour` (wrapping past midnight).
 func skip_to(target_hour: float) -> void:
 	hour = wrapf(target_hour, 0.0, 24.0)
-	_apply(0.0)
+	_apply_environment()
+	_publish_conditions()
 
 
 func is_daytime() -> bool:
@@ -70,7 +75,12 @@ func _process(delta: float) -> void:
 		return
 	var seconds_per_hour: float = lerpf(day_seconds_per_hour, night_seconds_per_hour, night)
 	hour = wrapf(hour + delta / seconds_per_hour, 0.0, 24.0)
-	_apply(delta)
+	_environment_left -= delta
+	# Sky, ambient and fog change slowly. Batch those RenderingServer setters while
+	# keeping time, sensor visibility, phase transitions and lightning responsive.
+	if _environment_left <= 0.0 or phase != _phase_for(hour) or (_weather != null and _weather.lightning > 0.0):
+		_apply_environment()
+	_publish_conditions()
 	_tick_left -= delta
 	if _tick_left <= 0.0:
 		_tick_left = 0.25
@@ -97,7 +107,8 @@ func _phase_for(h: float) -> StringName:
 	return PHASE_NIGHT
 
 
-func _apply(_delta: float) -> void:
+func _apply_environment() -> void:
+	_environment_left = ENVIRONMENT_INTERVAL
 	night = night_factor_for(hour)
 	var new_phase: StringName = _phase_for(hour)
 	if new_phase != phase:
@@ -114,18 +125,18 @@ func _apply(_delta: float) -> void:
 	var to_sun := Vector3(cos(elevation), sin(elevation), 0.35).normalized()
 	_sun.global_basis = Basis.looking_at(-to_sun, Vector3.UP if absf(to_sun.y) < 0.99 else Vector3.BACK)
 	var height: float = clampf(sin(elevation) * 2.5, 0.0, 1.0)
-	_sun.light_energy = height * 1.6 * (1.0 - cloud * 0.7)
+	_sun.light_energy = height * 1.95 * (1.0 - cloud * 0.45)
 	_sun.light_color = Color(1.0, 0.55, 0.32).lerp(Color(1.0, 0.96, 0.9), clampf(sin(elevation) * 2.0, 0.0, 1.0))
 	_sun.visible = _sun.light_energy > 0.01
 	_sun.shadow_enabled = night < 0.5
-	_moon.light_energy = _moon_energy * night * (1.0 - cloud * 0.55)
+	_moon.light_energy = _moon_energy * 1.3 * night * (1.0 - cloud * 0.28)
 	_moon.shadow_enabled = night >= 0.5
 	_moon.visible = _moon.light_energy > 0.01
 
-	var top: Color = Color(0.24, 0.44, 0.78).lerp(Color(0.03, 0.04, 0.08), night)
-	var horizon: Color = Color(0.62, 0.7, 0.8).lerp(Color(0.24, 0.2, 0.22), night)
+	var top: Color = Color(0.28, 0.5, 0.82).lerp(Color(0.07, 0.09, 0.15), night)
+	var horizon: Color = Color(0.68, 0.76, 0.87).lerp(Color(0.29, 0.33, 0.42), night)
 	horizon = horizon.lerp(Color(0.92, 0.52, 0.34), twilight * 0.75 * (1.0 - cloud * 0.6))
-	var overcast: Color = Color(0.46, 0.49, 0.53).lerp(Color(0.06, 0.06, 0.075), night)
+	var overcast: Color = Color(0.49, 0.53, 0.58).lerp(Color(0.11, 0.13, 0.17), night)
 	top = top.lerp(overcast, cloud * 0.85)
 	horizon = horizon.lerp(overcast * 1.15, cloud * 0.7)
 	var lightning_tint: Color = Color(0.6, 0.65, 0.85) * flash
@@ -134,15 +145,15 @@ func _apply(_delta: float) -> void:
 	_sky.ground_horizon_color = horizon * 0.6
 	_sky.ground_bottom_color = horizon * 0.15
 
-	_env.ambient_light_color = Color(0.62, 0.67, 0.76).lerp(Color(0.36, 0.39, 0.5), night).lerp(Color(0.5, 0.52, 0.56), cloud * 0.4 * day)
-	_env.ambient_light_energy = lerpf(1.05, 0.9, night) + flash * 2.5
-	_env.ambient_light_sky_contribution = lerpf(0.55, 0.35, night)
-	_env.tonemap_exposure = lerpf(0.95, 1.35, night)
+	_env.ambient_light_color = Color(0.68, 0.73, 0.8).lerp(Color(0.62, 0.69, 0.82), night).lerp(Color(0.54, 0.58, 0.63), cloud * 0.35 * day)
+	_env.ambient_light_energy = lerpf(1.18, 1.62, night) + flash * 2.5
+	_env.ambient_light_sky_contribution = lerpf(0.62, 0.48, night)
+	_env.tonemap_exposure = lerpf(1.04, 1.55, night)
 	_env.glow_intensity = lerpf(0.35, 0.7, night)
-	_env.fog_density = 0.003 + fog * 0.35
-	_env.fog_light_color = Color(0.62, 0.66, 0.72).lerp(Color(0.12, 0.12, 0.16), night).lerp(Color(0.5, 0.52, 0.55) * lerpf(1.0, 0.25, night), cloud * 0.5)
-	_env.volumetric_fog_density = 0.006 + fog
-	_env.volumetric_fog_emission = Color(0.045, 0.05, 0.055).lerp(Color(0.012, 0.012, 0.018), night)
+	_env.fog_density = 0.0012 + fog * 0.18
+	_env.fog_light_color = Color(0.65, 0.7, 0.78).lerp(Color(0.18, 0.21, 0.28), night).lerp(Color(0.56, 0.6, 0.66) * lerpf(1.0, 0.35, night), cloud * 0.45)
+	_env.volumetric_fog_density = 0.0023 + fog * 0.35
+	_env.volumetric_fog_emission = Color(0.035, 0.042, 0.05).lerp(Color(0.016, 0.02, 0.03), night)
 
 	var lamps: bool = night > 0.35
 	if lamps != _lamps_on:
@@ -154,7 +165,11 @@ func _apply(_delta: float) -> void:
 	_bulb.emission_energy_multiplier = 6.0 if lamps else 0.3
 
 	RenderingServer.global_shader_parameter_set(&"night_factor", night)
+
+
+func _publish_conditions() -> void:
+	var factor: float = night_factor_for(hour)
 	WorldConditions.hour = hour
-	WorldConditions.night_factor = night
-	WorldConditions.is_day = night < 0.5
-	WorldConditions.visibility = (_weather.visibility if _weather != null else 1.0) * lerpf(1.2, 1.0, night)
+	WorldConditions.night_factor = factor
+	WorldConditions.is_day = factor < 0.5
+	WorldConditions.visibility = (_weather.visibility if _weather != null else 1.0) * lerpf(1.2, 1.0, factor)

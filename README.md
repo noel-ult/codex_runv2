@@ -3,7 +3,7 @@
 An open-world stealth heist set in a rain-soaked night city, built in **Godot 4** with strictly typed GDScript.
 There are **no imported asset files**:
 - **Surfaces:** every texture is a procedural shader (brick, concrete and glass facades with lit interiors and shop signs, wet asphalt, paving, painted steel, foliage, fabric with seams and glowing Codex veins).
-- **Characters:** one continuous skinned mesh lofted from cross-sections, driven by a procedurally animated `Skeleton3D`.
+- **Characters:** skinned body and clothing surfaces lofted from cross-sections, driven by a procedurally animated `Skeleton3D`.
 - **Everything else:** UI, weather and minigames are all built in code.
 
 ## Running
@@ -18,49 +18,60 @@ There are **no imported asset files**:
 
 You carry the **Codex**. The only way to send it to safety is through the Hunters' own uplink:
 
-1. **Tap HunterNet.** Sneak up behind an *unaware* (green-visor) Hunter and hold **E** on its suit port. While you work the **Signal Lock** hack, the Hunter freezes. Win it and you steal HunterNet credentials; fail and it wakes up on you.
+1. **Copy and decode HunterNet.** Sneak up behind an *unaware* (green-visor) Hunter and hold **E** on its suit port to copy an encrypted packet. You can keep moving after copying. Carry it to **Storage 07** on the west edge and hold **E** at the indoor **HunterNet decoder** to start Signal Lock in shelter. Win to recover lab credentials and automatically save a checkpoint. Escape leaves the packet available for another attempt.
 2. **Infiltrate Meridian Signal Labs** (the walled compound in the NE block) and authenticate at the **HunterNet core** door with the credentials.
-3. **Breach the Main Hunter Database** in three retro layers on the CRT terminal: **Signal Lock**, then **Firewall Breaker**, then **Cipher Recovery**. Mistakes raise the **TRACE** meter. At 100% the HunterNet locates you (alarm) and locks the terminal for 20 s.
-4. **Lockdown.** A successful breach reveals the one live uplink relay and its cipher. It also triggers a HunterNet lockdown: every Hunter converges, the relay guard doubles, and the Codex Release speeds up to every 20 s.
+3. **Breach the Main Hunter Database** in three retro layers on the CRT terminal: **Signal Lock**, then **Firewall Override**, then **Cipher Recovery**. Mistakes raise the **TRACE** meter. At 100% the HunterNet locates you (alarm) and locks the terminal for 20 s.
+4. **Lockdown.** A successful breach reveals the one live uplink relay and its cipher. It also triggers a HunterNet lockdown: every Hunter converges, the relay guard doubles, and the Codex Release speeds up to every 20 s. Before starting the uplink, you can use the violet relay marker to send a false handshake and divert up to two Hunters for 24 seconds.
 5. **Transmit.** Hold **E** at the live relay and survive **30 s** within 16 m while the uplink broadcasts your position.
+
+Before decoding, capture sends you back to the packet-copy step. After decoding, capture returns you to Storage 07 with your lab credentials and resets core access, the database breach and uplink progress. Your gear, upgrades and credits survive capture. Storage 07 protects you from Hunter contact inside its sheltered room.
+
+Relaunching resumes from the saved credential checkpoint with starting gear, starting credits and the decode salvage reward. The credential decode is the only save point. Press **R** during gameplay or confirm **Restart Run** in the pause menu to clear the checkpoint and begin again.
 
 ## Controls
 
 | Key | Action |
 | --- | --- |
-| W A S D / Arrows | Move |
+| W A S D / Arrows | Move on foot; drive/reverse and steer in a vehicle |
 | Mouse | Camera |
-| Space | Jump. Press again in the air for a **Leap** (Super Jump) |
+| Space | Jump. Press again in the air for a **Leap** (Super Jump); brake while driving |
 | Q | Leap from the ground |
 | Shift | **Dash** |
 | F | Toggle **Full Form** |
 | C / Ctrl | Toggle **crouch** |
 | Z | Toggle **prone** (lie down and crawl) |
-| E (hold) | Interact: suit ports, ID cloning, panels, doors, terminal, decoys, relay |
+| E (hold) | Interact: suit ports, ID cloning, panels, doors, terminal, decoys, relay, vehicle doors, day jobs and supply counter |
+| E (tap) | Leave a vehicle once stopped |
 | Left mouse | Use the selected gadget |
 | 1 / 2 / 3, mouse wheel | Select Jammer Dart / EMP Charge / Decoy Codex |
 | Tab | Toggle the objective log |
-| R | Restart |
-| Esc | Release the mouse / disconnect from a terminal |
+| R | Restart Run (clears the credential checkpoint) |
+| Esc | Pause or resume play. Disconnect from a terminal or leave the workbench when one is open |
+
+Open **Esc → Controls** to check the current bindings for gameplay, terminal minigames, and the workbench. **Esc → Operators** lets you inspect the Runner, Hunter, Civilian, and Technician in 3D. Drag the model to rotate it, or use the left and right arrows while the preview has focus.
+
+The pause menu’s **Graphics** selector saves your choice across runs. **Detail** uses full resolution and the complete lighting effects. **Performance** renders the 3D view at 80% scale and turns off screen space reflections, ambient occlusion, and volumetric fog. HUD text stays at full resolution.
 
 Terminal minigames:
 - **Signal Lock:** A/D tune frequency and W/S tune phase. Match the drifting carrier and hold the lock.
-- **Firewall Breaker:** A/D move the paddle and Space launches the probe. Destroy every CORE node; each dropped probe adds trace.
-- **Cipher:** A/D select a slot, W/S change the glyph, Enter submits. ● = right glyph in the right slot, ○ = right glyph in the wrong slot.
+- **Firewall Override:** Follow three prompts by pressing the displayed number key (1, 2, or 3). A wrong key adds trace.
+- **Cipher:** A/D select a slot, W/S change the glyph, Enter submits. ● = right glyph in the right slot, ○ = right glyph in the wrong slot. The code has no repeated glyphs, and each clue counts a glyph only once.
 
 ## Day, night and weather
 
 - **Clock:** the city runs a 24 h day. Nights last longer (about 8 real minutes) than days (about 5 minutes).
 - **At dawn:** the sun rises, the sky brightens, street lamps switch off and fewer windows stay lit. At dusk it all reverses.
 - **Daylight is dangerous.** Codex Releases reach 50% further and come 30% sooner. Lie low in the **hideout**, the shielded `STORAGE 07` lock-up on the west edge (marked on the compass), or rest until dusk.
-- **Weather** cycles between clear, overcast, fog (favoured in the morning), drizzle and storm (favoured in the evening). It drives rain, fog, cloud, lightning and how wet the streets are.
+- **Morning work:** from dawn until 18:00, visit the marked courier depot on the southwest sidewalk. Hold E to collect a parcel, take it to the marked drop point, then hold E again to earn credits. Routes rotate after each delivery. An unfinished job expires at dusk or on capture. Use the cot at Storage 07 overnight to wait until 06:00.
+- **Vehicles:** three labeled parked cars can be driven day or night, including during the heist. Hold E at the driver door to enter. Use W/S to drive and reverse, A/D to steer, Space to brake, and E to exit after stopping. Gadgets and on-foot interactions are unavailable while driving.
+- **Weather** starts clear, then cycles between clear, overcast, light fog (favoured in the morning), drizzle and storm (favoured in the evening). It drives rain, fog, cloud, lightning and how wet the streets are. Even foggy days keep the city readable.
 - **Weather changes stealth:**
   - Fog and storms shrink camera, turret, searchlight and drone ranges.
   - Storms ground the Seeker Drones.
 
 ## The hideout and prep station
 
-Inside the hideout the Codex is masked. Use the **workbench** (E) to spend **salvage parts**. You get parts from salvage pickups around the city, from downed Seeker Drones (+2) and from hunter suit hacks (+3).
+Inside the hideout the Codex is masked. Use the **workbench** (E) to spend **salvage parts**. You get parts from salvage pickups around the city, from downed Seeker Drones (+2) and from the first successful packet decode in each run (+3).
 
 | Fabricate | Cost |
 | --- | --- |
@@ -77,6 +88,21 @@ Inside the hideout the Codex is masked. Use the **workbench** (E) to spend **sal
 | Signature dampener (−15% Release radius) | 6 |
 
 During the day, the station or the **cot** lets you **rest until dusk** (19:00).
+
+## Credits and the supply counter
+
+The Runner starts with **40 credits**. Morning courier deliveries pay more; credits and bought supplies survive capture, while restarting the run resets the wallet. Credits are separate from salvage parts used at the hideout workbench.
+
+Field dispatch sits near the starting street and offers two jobs around the clock. **Case Recovery** pays 75 credits when you retrieve the marked data case and return it to dispatch. **Signal Survey** pays 90 credits when you scan both receivers. The first scan starts a 55-second timer. Case locations rotate and the survey route reverses on repeat jobs.
+
+The marked **SUPPLIES** counter sits on the sidewalk beside Meridian Labs. Hold E on foot to browse, W/S or the arrows to select, E or Enter to buy, and Escape to leave. A purchase only goes through when the full pack fits in your inventory.
+
+| Supply | Price |
+| --- | ---: |
+| Jammer darts ×3 | 18 credits |
+| EMP charge ×1 | 25 credits |
+| Resonance cells ×2 | 16 credits |
+| Salvage parts ×2 | 20 credits |
 
 ## The Codex
 
@@ -139,12 +165,12 @@ Civilians walk the sidewalks, and **lab technicians** commute between the SE bus
 
 | Area | Contents |
 | --- | --- |
-| Top centre | Compass with objective bearings and distances |
+| Top centre | Heading tape with objective bearings and distances |
 | Top left | Current objective (Tab for the full log) |
 | Top right | Threat state (UNDETECTED / SEARCHING / HUNTED), with a matching screen-edge vignette |
-| Bottom left | Form, Resonance, Codex Release countdown, ability keys and status chips (ignited, dead zone, disguise timer, lockdown) |
+| Bottom left | Form, Resonance, Codex Release countdown, ability keys and status chips (stance, ignition, dead zone, disguise timer, lockdown) |
 | Bottom right | Selected gadget, ammo, cells and decoys |
-| Centre | Interaction prompts with a hold bar |
+| Centre | World markers, jammer target lock, and interaction prompts with a hold bar |
 | Bottom centre | Radio subtitles |
 
 ## Architecture
@@ -161,7 +187,7 @@ Main (main.gd — composition root: the ONLY place systems are wired together)
 │        ├── 4× UplinkStation, Hideout, DeadZones, TrafficVehicles, Pickups, NpcWalkers
 ├── Player (CharacterBody3D + HumanoidRig + CodexSignalSystem + GadgetBelt + camera rig)
 ├── HunterAIDirector → 4× hunter.tscn (HunterAgent + HumanoidRig + weapons) + SeekerDrones
-├── MissionDirector (objective chain) · HackTerminal (CRT minigames) · PrepStationUI · HUD
+├── MissionDirector (objective chain) · HackTerminal (CRT minigames) · PrepStationUI · HUD · PauseMenu
 ```
 
 **Decoupling rules**
@@ -174,7 +200,7 @@ Main (main.gd — composition root: the ONLY place systems are wired together)
   - `decoy_emitters` + `hunter_disable()`.
 - World and mission systems feed positions to the Hunters through `HunterAIDirector.report_signal()`, wired in `main.gd`.
 
-**Characters**: `HumanoidRig` lofts torso, neck, head, arms, hands, legs and feet into one `ArrayMesh`, with 4-bone weights blended across every joint. It skins that mesh to a 17-bone `Skeleton3D` and adds gear (hood, armour, visor, backpack, badge) via `BoneAttachment3D`. Gait, jump, dash, crouch and scan poses are computed every frame. Outfits: Runner, Hunter, Civilian (seeded variety) and Technician; `apply_style()` swaps them at runtime for disguises.
+**Characters**: `HumanoidRig` builds the torso, head, limbs, and clothing as skinned surfaces in an `ArrayMesh`. A 17-bone `Skeleton3D` drives the walk, run, jump, dash, crouch, crawl, and scan poses. Faces, hands, shoe soles, and outfit shapes are modeled in code. The Runner, Hunter, Civilian, and Technician each have their own clothing and gear, and `apply_style()` recreates the same seeded outfits for disguises.
 
 **Physics layers**: 1 world, 2 runner, 3 hunters, 4 vehicles, 5 triggers, 6 doors, 7 electronics (dart hitboxes), 8 NPCs.
 
@@ -187,3 +213,5 @@ godot --headless --path . --import
 for f in $(find scripts -name '*.gd'); do godot --headless --path . --check-only --script "$f"; done
 godot --headless --path . --quit-after 600         # runs main.tscn ~10 s, should print nothing
 ```
+
+For the system map, shared-folder coordination rules and developer handoff, see [the project guide](docs/PROJECT_GUIDE.md).

@@ -2,8 +2,7 @@ class_name UplinkStation
 extends Node3D
 ## Dormant relay mast on the city edge. Exactly one station per run is genuine: only that one
 ## can carry the Codex to safety, and only Hunters know which one it is (they sweep it).
-## Visual states: dormant (red), handshake (blue pulses while a Hunter scans it),
-## revealed (green), transmitting (rising beam).
+## Violet marks the optional spoof relay. Green marks the real uplink.
 
 @export var station_label: String = "RELAY"
 
@@ -16,9 +15,14 @@ var _status_light: OmniLight3D
 var _beam: MeshInstance3D
 var _beam_material: StandardMaterial3D
 var _dish: Node3D
+var _plate: Label3D
 var _handshake: bool = false
 var _transmit: float = -1.0
+var _spoof_available: bool = false
+var _spoof_left: float = 0.0
 var _time: float = 0.0
+
+const SPOOF_COLOR: Color = Color(0.78, 0.36, 1.0)
 
 
 func _ready() -> void:
@@ -30,7 +34,7 @@ func _ready() -> void:
 	interactable.radius = 3.2
 	interactable.position = Vector3(0.0, 0.0, 2.2)
 	add_child(interactable)
-	_set_status(Color(1.0, 0.15, 0.1), 2.0)
+	_restore_status()
 
 
 func _process(delta: float) -> void:
@@ -38,10 +42,19 @@ func _process(delta: float) -> void:
 	_dish.rotation.y = sin(_time * 0.2) * 0.6
 	if _transmit >= 0.0:
 		var pulse: float = 0.6 + 0.4 * sin(_time * 8.0)
-		_beam.visible = true
 		_beam.scale = Vector3(1.0 + _transmit, 1.0, 1.0 + _transmit)
 		_beam_material.albedo_color = Color(0.4, 1.0, 0.6, (0.08 + 0.25 * _transmit) * pulse)
 		_status_light.light_energy = 3.0 + 3.0 * pulse
+	elif _spoof_left > 0.0:
+		_spoof_left = maxf(_spoof_left - delta, 0.0)
+		if _spoof_left <= 0.0:
+			stop_spoof()
+			return
+		var pulse: float = 0.5 + 0.5 * sin(_time * 9.0)
+		var fade: float = minf(_spoof_left, 1.0)
+		_beam_material.albedo_color = Color(SPOOF_COLOR, (0.07 + 0.10 * pulse) * fade)
+		_set_status(SPOOF_COLOR, 2.0 + 5.0 * pulse)
+		_status_light.light_energy = 2.0 + 2.0 * pulse
 	elif _handshake:
 		var blink: float = step_pulse(_time * 3.0)
 		_set_status(Color(0.25, 0.55, 1.0), 1.0 + 5.0 * blink)
@@ -63,13 +76,49 @@ func set_revealed() -> void:
 	_restore_status()
 
 
+func set_spoof_available(available: bool) -> void:
+	_spoof_available = available
+	if _spoof_left <= 0.0:
+		_restore_status()
+
+
+func broadcast_spoof(duration: float) -> void:
+	_spoof_left = duration
+	_plate.text = "%s\nFALSE UPLINK ACTIVE" % station_label
+	_set_status(SPOOF_COLOR, 4.0)
+	_beam.position.y = 24.0
+	_beam.scale = Vector3(0.78, 0.4, 0.78)
+	_beam_material.albedo_color = Color(SPOOF_COLOR, 0.12)
+	_beam.visible = true
+
+
+func stop_spoof() -> void:
+	if _transmit >= 0.0:
+		return
+	_spoof_left = 0.0
+	_beam.visible = false
+	_restore_status()
+
+
+func reset_mission_state() -> void:
+	revealed = false
+	_handshake = false
+	_spoof_available = false
+	_spoof_left = 0.0
+	set_transmission(-1.0)
+
+
 func set_transmission(progress: float) -> void:
+	var was_transmitting: bool = _transmit >= 0.0
 	_transmit = progress
 	if progress < 0.0:
 		_beam.visible = false
 		_restore_status()
-	else:
+	elif not was_transmitting:
 		_set_status(Color(0.3, 1.0, 0.55), 6.0)
+		_plate.text = "%s\nTRANSMITTING" % station_label
+		_beam.position.y = 60.0
+		_beam.visible = true
 
 
 func get_marker_position() -> Vector3:
@@ -77,10 +126,17 @@ func get_marker_position() -> Vector3:
 
 
 func _restore_status() -> void:
+	var state: String = "DORMANT RELAY"
+	_status_light.light_energy = 2.0
 	if revealed:
 		_set_status(Color(0.3, 1.0, 0.45), 4.0)
+		state = "LIVE UPLINK"
+	elif _spoof_available:
+		_set_status(SPOOF_COLOR, 3.8)
+		state = "FALSE UPLINK READY"
 	else:
 		_set_status(Color(1.0, 0.15, 0.1), 2.0)
+	_plate.text = "%s\n%s" % [station_label, state]
 
 
 func _set_status(color: Color, energy: float) -> void:
@@ -154,15 +210,13 @@ func _build() -> void:
 	for x: float in [-2.6, 2.6]:
 		GeometryKit.mesh_box(self, Vector3(x, 1.0, 3.4), Vector3(1.6, 1.8, 0.02), mesh_mat)
 
-	var plate := Label3D.new()
-	plate.double_sided = false
-	plate.text = "%s\nDORMANT RELAY" % station_label
-	plate.font_size = 40
-	plate.pixel_size = 0.01
-	plate.modulate = Color(0.9, 0.9, 0.85)
-	plate.position = Vector3(0.0, 2.2, -1.34)
-	plate.rotation_degrees = Vector3(0.0, 180.0, 0.0)
-	add_child(plate)
+	_plate = Label3D.new()
+	_plate.double_sided = false
+	_plate.font_size = 38
+	_plate.pixel_size = 0.007
+	_plate.modulate = Color(0.9, 0.9, 0.85)
+	_plate.position = Vector3(0.0, 2.2, 1.05)
+	add_child(_plate)
 
 	_status_material = MaterialLibrary.emissive(Color(1.0, 0.15, 0.1), 2.0, false)
 	GeometryKit.sphere(self, Vector3(0.0, mast_h + 3.1, 0.0), 0.18, _status_material)

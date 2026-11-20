@@ -20,15 +20,20 @@ const RING_WIDTH: float = 14.0
 const MAP_HALF_EXTENT: float = 75.0
 const ALLEY: float = 5.0
 const SIDEWALK_HEIGHT: float = 0.1
+const StaticMeshBatcher = preload("res://scripts/world/static_mesh_batcher.gd")
 
 @export var random_seed: int = 1337
+## Disable for renderer comparisons with individual procedural meshes.
+@export var batch_static_geometry: bool = true
 
 var dead_zones: Array[DeadZone] = []
 var traffic_vehicles: Array[TrafficVehicle] = []
+var driveable_vehicles: Array[DriveableVehicle] = []
 var uplink_stations: Array[UplinkStation] = []
 var facility: FacilityCompound
 var npcs: Array[NpcWalker] = []
 var hideout: Hideout
+var supply_counter: SupplyCounter
 var patrol_points: Array[Vector3] = []
 var hunter_spawn_points: Array[Vector3] = []
 var player_spawn_point: Vector3 = Vector3(0.0, 0.2, 29.0)
@@ -50,7 +55,10 @@ func _ready() -> void:
 	_build_tunnel()
 	_build_perimeter_and_skyline()
 	_build_street_furniture()
+	if batch_static_geometry:
+		StaticMeshBatcher.optimize(_geometry)
 	_build_parked_cars()
+	_build_supply_counter()
 	_build_uplinks()
 	_build_hideout()
 	_build_pickups()
@@ -403,7 +411,22 @@ func _build_parked_cars() -> void:
 		Vector3(5.3, 0.0, 16.0), Vector3(5.3, 0.0, 24.0), Vector3(-5.3, 0.0, 34.0), Vector3(-5.3, 0.0, 42.0),
 		Vector3(5.3, 0.0, -18.0), Vector3(-5.3, 0.0, -24.0), Vector3(-5.3, 0.0, -40.0), Vector3(5.3, 0.0, -44.0),
 	]
-	for slot: Vector3 in slots:
+	for index: int in slots.size():
+		var slot: Vector3 = slots[index]
+		# Leave a clear pull-out lane ahead of the sedan near the Runner's spawn.
+		if index == 0:
+			continue
+		if index == 1 or index == 5 or index == 6:
+			var vehicle: DriveableVehicle = DriveableVehicle.new()
+			vehicle.name = "DriveableVehicle%d" % index
+			vehicle.display_name = "Courier van" if index == 5 else ("City taxi" if index == 6 else "Street sedan")
+			vehicle.kind = VehicleModel.Kind.VAN if index == 5 else (VehicleModel.Kind.TAXI if index == 6 else VehicleModel.Kind.SEDAN)
+			vehicle.body_color = Color(0.68, 0.33, 0.09) if index == 5 else (Color(0.96, 0.68, 0.12) if index == 6 else Color(0.12, 0.48, 0.46))
+			vehicle.position = slot + Vector3(0.0, 0.14, 0.0)
+			vehicle.rotation_degrees.y = 0.0 if slot.x > 0.0 else 180.0
+			_geometry.add_child(vehicle)
+			driveable_vehicles.append(vehicle)
+			continue
 		var body := StaticBody3D.new()
 		body.collision_layer = GeometryKit.WORLD_LAYER
 		body.collision_mask = 0
@@ -418,6 +441,13 @@ func _build_parked_cars() -> void:
 		body.add_child(shape)
 		var kind: VehicleModel.Kind = VehicleModel.Kind.VAN if _rng.randf() < 0.2 else VehicleModel.Kind.SEDAN
 		VehicleModel.build(body, kind, VehicleModel.random_paint(_rng), false)
+
+
+func _build_supply_counter() -> void:
+	supply_counter = SupplyCounter.new()
+	supply_counter.name = "SupplyCounter"
+	supply_counter.position = Vector3(8.2, SIDEWALK_HEIGHT, -30.0)
+	_geometry.add_child(supply_counter)
 
 
 func _build_uplinks() -> void:

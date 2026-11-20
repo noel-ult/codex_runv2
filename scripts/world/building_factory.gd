@@ -8,6 +8,8 @@ enum Style { BRICK, CONCRETE, GLASS }
 
 const FLOOR_HEIGHT: float = 3.4
 const GROUND_FLOOR: float = 4.2
+const WINDOW_SPACING: float = 2.7
+const SHOP_SPACING: float = 3.4
 
 const BRICK_COLORS: Array[Color] = [Color(0.45, 0.2, 0.14), Color(0.52, 0.3, 0.2), Color(0.36, 0.18, 0.13), Color(0.5, 0.42, 0.33)]
 const CONCRETE_COLORS: Array[Color] = [Color(0.56, 0.55, 0.52), Color(0.48, 0.47, 0.45), Color(0.62, 0.58, 0.5), Color(0.4, 0.42, 0.45)]
@@ -54,6 +56,89 @@ static func building(parent: Node3D, center: Vector3, footprint: Vector2, height
 		_add_fire_escape(root, footprint, height, fire_escape_face)
 	if rooftop:
 		_add_rooftop(root, footprint, height, style, rng)
+	_add_facade_trim(root, footprint, height, style, storefront)
+
+
+## Build trim in the same world aligned bays as facade.gdshader. The existing wall
+## provides the glass and interiors behind the trim, plus all of the collision.
+static func _add_facade_trim(root: Node3D, footprint: Vector2, height: float, style: Style, storefront: bool) -> void:
+	var trim: Array[Transform3D] = []
+	var frames: Array[Transform3D] = []
+	var glass: bool = style == Style.GLASS
+	var floor_base: float = GROUND_FLOOR if storefront else 0.0
+	var top: float = height - 0.9
+	for normal: Vector3 in [Vector3.RIGHT, Vector3.LEFT, Vector3.BACK, Vector3.FORWARD]:
+		var tangent: Vector3 = normal.cross(Vector3.UP)
+		var half_width: float = absf(tangent.x) * footprint.x * 0.5 + absf(tangent.z) * footprint.y * 0.5
+		var wall_depth: float = absf(normal.x) * footprint.x * 0.5 + absf(normal.z) * footprint.y * 0.5
+		var face := Transform3D(Basis(tangent, Vector3.UP, -normal), normal * wall_depth)
+		var world_u: float = root.global_position.dot(tangent)
+		for column: int in range(floori((world_u - half_width) / WINDOW_SPACING), ceili((world_u + half_width) / WINDOW_SPACING)):
+			var bay: float = float(column) * WINDOW_SPACING - world_u
+			var left: float = bay + WINDOW_SPACING * (0.04 if glass else 0.24)
+			var right: float = bay + WINDOW_SPACING * (0.96 if glass else 0.76)
+			for level: int in ceili((top - floor_base) / FLOOR_HEIGHT):
+				var floor_y: float = floor_base + float(level) * FLOOR_HEIGHT
+				var bottom: float = maxf(floor_y + FLOOR_HEIGHT * (0.06 if glass else 0.30), 0.6)
+				var end_y: float = minf(floor_y + FLOOR_HEIGHT * (0.96 if glass else 0.86), top)
+				if end_y - bottom < 0.35:
+					continue
+				if glass:
+					var opening := Rect2(left, bottom, right - left, end_y - bottom)
+					_add_frame(frames, face, opening, half_width, 0.085, 0.11, 0.12)
+					_add_trim_box(frames, face, Rect2((left + right) * 0.5 - 0.025, bottom, 0.05, end_y - bottom), half_width, 0.065)
+				else:
+					var opening := Rect2(left - 0.045, bottom, right - left + 0.09, end_y - bottom)
+					_add_frame(frames, face, opening, half_width, 0.065, 0.095, 0.07)
+					_add_trim_box(trim, face, Rect2(left - 0.17, bottom - 0.15, right - left + 0.34, 0.145), half_width, 0.29)
+					_add_trim_box(trim, face, Rect2(left - 0.11, end_y - 0.035, right - left + 0.22, 0.17), half_width, 0.19)
+		if storefront:
+			for column: int in range(floori((world_u - half_width) / SHOP_SPACING), ceili((world_u + half_width) / SHOP_SPACING)):
+				var bay: float = float(column) * SHOP_SPACING - world_u
+				var opening := Rect2(bay + 0.33, 0.39, 2.74, 3.47)
+				_add_frame(frames, face, opening, half_width, 0.11, 0.12, 0.18)
+				_add_trim_box(frames, face, Rect2(bay + 1.66, 0.39, 0.08, 2.66), half_width, 0.15)
+				_add_trim_box(trim, face, Rect2(bay + 0.24, 2.98, 2.92, 0.14), half_width, 0.24)
+				_add_trim_box(trim, face, Rect2(bay + 0.23, 0.30, 2.94, 0.15), half_width, 0.27)
+				_add_trim_box(trim, face, Rect2(bay - 0.16, 0.39, 0.32, 3.64), half_width, 0.21)
+	var masonry: Color = Color(0.48, 0.42, 0.35) if style == Style.BRICK else Color(0.42, 0.43, 0.44)
+	var metal: Color = Color(0.32, 0.38, 0.44) if glass else Color(0.19, 0.20, 0.21)
+	_add_trim_batch(root, "StoneTrim", MaterialLibrary.surface(masonry, 0.87, 0.0, 0.45, 6.0), trim)
+	_add_trim_batch(root, "WindowFrames", MaterialLibrary.surface(metal, 0.46, 0.34, 0.16, 8.0), frames)
+
+
+static func _add_frame(parts: Array[Transform3D], face: Transform3D, opening: Rect2, half_width: float, stile: float, rail: float, depth: float) -> void:
+	_add_trim_box(parts, face, Rect2(opening.position.x, opening.position.y, stile, opening.size.y), half_width, depth)
+	_add_trim_box(parts, face, Rect2(opening.end.x - stile, opening.position.y, stile, opening.size.y), half_width, depth)
+	_add_trim_box(parts, face, Rect2(opening.position.x + stile, opening.position.y, opening.size.x - stile * 2.0, rail), half_width, depth)
+	_add_trim_box(parts, face, Rect2(opening.position.x + stile, opening.end.y - rail, opening.size.x - stile * 2.0, rail), half_width, depth)
+
+
+static func _add_trim_box(parts: Array[Transform3D], face: Transform3D, rect: Rect2, half_width: float, depth: float) -> void:
+	var left: float = maxf(rect.position.x, -half_width + 0.035)
+	var right: float = minf(rect.end.x, half_width - 0.035)
+	if right - left < 0.025:
+		return
+	var center := Vector3((left + right) * 0.5, rect.get_center().y, 0.018 - depth * 0.5)
+	parts.append(face * Transform3D(Basis.from_scale(Vector3(right - left, rect.size.y, depth)), center))
+
+
+static func _add_trim_batch(parent: Node3D, node_name: String, material: Material, parts: Array[Transform3D]) -> void:
+	if parts.is_empty():
+		return
+	var box := BoxMesh.new()
+	box.size = Vector3.ONE
+	box.material = material
+	var batch := MultiMesh.new()
+	batch.transform_format = MultiMesh.TRANSFORM_3D
+	batch.mesh = box
+	batch.instance_count = parts.size()
+	for index: int in parts.size():
+		batch.set_instance_transform(index, parts[index])
+	var detail := MultiMeshInstance3D.new()
+	detail.name = node_name
+	detail.multimesh = batch
+	parent.add_child(detail)
 
 
 ## Cheap silhouette building for the skyline beyond the playable area.
@@ -95,6 +180,12 @@ static func _add_awnings(root: Node3D, footprint: Vector2, rng: RandomNumberGene
 			var strip: Vector3 = tangent * 3.0 + n.abs() * 0.03
 			GeometryKit.mesh_box(root, pos + n * 0.62 + Vector3(0.0, -0.32, 0.0), strip + Vector3(0.0, 0.25, 0.0), cloth)
 			GeometryKit.mesh_box(root, pos - n * 0.6 + Vector3(0.0, 0.22, 0.0), tangent * 3.0 + Vector3(0.04, 0.04, 0.04), frame)
+			for side: float in [-1.18, 1.18]:
+				var foot: Vector3 = pos - n * 0.59 + tangent * side - Vector3.UP * 0.75
+				var tip: Vector3 = pos + n * 0.49 + tangent * side - Vector3.UP * 0.2
+				var brace: Vector3 = tip - foot
+				var support: MeshInstance3D = GeometryKit.mesh_box(root, (foot + tip) * 0.5, Vector3(0.065, 0.065, brace.length()), frame)
+				support.basis = Basis.looking_at(brace.normalized())
 
 
 static func _add_fire_escape(root: Node3D, footprint: Vector2, height: float, face: int) -> void:

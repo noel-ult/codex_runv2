@@ -14,6 +14,8 @@ const STAGE_SIGNAL: StringName = &"signal_lock"
 const STAGE_FIREWALL: StringName = &"firewall"
 const STAGE_CIPHER: StringName = &"cipher"
 const FAIL_TRACE: float = 30.0
+const PANEL_SIZE: Vector2 = Vector2(944.0, 642.0)
+const GAME_SIZE: Vector2 = Vector2(880.0, 480.0)
 
 var is_open: bool = false
 var trace: float = 0.0
@@ -42,6 +44,7 @@ func _ready() -> void:
 	_font = SystemFont.new()
 	_font.font_names = PackedStringArray(["JetBrains Mono", "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Courier New", "monospace"])
 	_build_ui()
+	get_viewport().size_changed.connect(_fit_panel)
 	_root.visible = false
 
 
@@ -52,6 +55,8 @@ func open(session_id: StringName, title_text: String, stages: Array[StringName],
 	_stage_index = 0
 	_difficulty = difficulty
 	trace = 0.0
+	_trace_bar.value = trace
+	_trace_fill.bg_color = RetroMinigame.PHOSPHOR
 	trace_changed.emit(trace)
 	is_open = true
 	_root.visible = true
@@ -61,16 +66,30 @@ func open(session_id: StringName, title_text: String, stages: Array[StringName],
 
 
 func close() -> void:
-	if _game != null:
-		_game.queue_free()
-		_game = null
+	var was_open: bool = is_open
+	_advance_time = -1.0
+	_discard_game()
 	is_open = false
 	_root.visible = false
-	opened_changed.emit(false)
+	if was_open:
+		opened_changed.emit(false)
 
 
 func get_current_game() -> RetroMinigame:
 	return _game
+
+
+## Capture discards the session without an abort callback from an obsolete mission step.
+func reset_session() -> void:
+	close()
+	_session = &""
+	_stages.clear()
+	_stage_index = 0
+	trace = 0.0
+	_trace_bar.value = 0.0
+	_trace_fill.bg_color = RetroMinigame.PHOSPHOR
+	_banner_time = 0.0
+	trace_changed.emit(trace)
 
 
 func _input(event: InputEvent) -> void:
@@ -108,19 +127,19 @@ func _process(delta: float) -> void:
 
 
 func _start_stage() -> void:
-	if _game != null:
-		_game.queue_free()
+	_discard_game()
 	var stage: StringName = _stages[_stage_index]
 	match stage:
 		STAGE_FIREWALL:
-			_game = FirewallBreakerGame.new()
+			_game = FirewallOverrideGame.new()
 		STAGE_CIPHER:
 			_game = CipherGame.new()
 		_:
 			_game = SignalLockGame.new()
 	_game.difficulty = _difficulty
 	_game.font = _font
-	_game.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Give the physics-based minigames their playfield before their _ready runs.
+	_game.size = GAME_SIZE
 	_game_host.add_child(_game)
 	_game_host.move_child(_banner, -1)
 	_game.succeeded.connect(_on_stage_succeeded)
@@ -129,6 +148,17 @@ func _start_stage() -> void:
 	_stage_label.text = "STAGE %d/%d  ·  %s" % [_stage_index + 1, _stages.size(), _game.title()]
 	_footer.text = _game.help_text() + "      ESC  disconnect"
 	_flash("CONNECTING...", RetroMinigame.PHOSPHOR)
+
+
+func _discard_game() -> void:
+	if _game == null:
+		return
+	_game.finished = true
+	_game.succeeded.disconnect(_on_stage_succeeded)
+	_game.failed.disconnect(_on_stage_failed)
+	_game.trace_spike.disconnect(_add_trace)
+	_game.queue_free()
+	_game = null
 
 
 func _on_stage_succeeded() -> void:
@@ -140,8 +170,8 @@ func _on_stage_failed(reason: String) -> void:
 	_add_trace(FAIL_TRACE)
 	if not is_open:
 		return
-	_flash("%s  ·  TRACE +%d%%  ·  RETRYING" % [reason, int(FAIL_TRACE)], RetroMinigame.RED)
 	_start_stage()
+	_flash("%s  ·  TRACE +%d%%  ·  RETRYING" % [reason, int(FAIL_TRACE)], RetroMinigame.RED)
 
 
 func _add_trace(amount: float) -> void:
@@ -176,32 +206,30 @@ func _build_ui() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(_root)
 	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.72)
+	dim.color = Color(0.015, 0.036, 0.045, 0.82)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.add_child(dim)
 
 	_panel = PanelContainer.new()
-	_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	_panel.offset_left = -470.0
-	_panel.offset_right = 470.0
-	_panel.offset_top = -330.0
-	_panel.offset_bottom = 330.0
+	_panel.size = PANEL_SIZE
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.01, 0.035, 0.02, 0.97)
-	style.border_color = Color(0.2, 0.6, 0.3)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(14)
-	style.shadow_color = Color(0.2, 1.0, 0.4, 0.15)
-	style.shadow_size = 18
-	style.content_margin_left = 24.0
-	style.content_margin_right = 24.0
-	style.content_margin_top = 18.0
-	style.content_margin_bottom = 18.0
+	style.bg_color = Color("0a151a")
+	style.border_color = Color("3d635d")
+	style.set_border_width_all(1)
+	style.border_width_top = 3
+	style.set_corner_radius_all(8)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.66)
+	style.shadow_size = 14
+	style.shadow_offset = Vector2(0.0, 12.0)
+	style.content_margin_left = 32.0
+	style.content_margin_right = 32.0
+	style.content_margin_top = 22.0
+	style.content_margin_bottom = 22.0
 	_panel.add_theme_stylebox_override(&"panel", style)
 	_root.add_child(_panel)
 
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override(&"separation", 8)
+	box.add_theme_constant_override(&"separation", 12)
 	_panel.add_child(box)
 	var top := HBoxContainer.new()
 	box.add_child(top)
@@ -227,10 +255,14 @@ func _build_ui() -> void:
 	box.add_child(_stage_label)
 
 	_game_host = Control.new()
-	_game_host.custom_minimum_size = Vector2(880.0, 480.0)
-	_game_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_game_host.custom_minimum_size = GAME_SIZE
 	_game_host.clip_contents = true
 	box.add_child(_game_host)
+	var screen := ColorRect.new()
+	screen.color = Color("020c08")
+	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_game_host.add_child(screen)
+	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_banner = _label(26, RetroMinigame.PHOSPHOR)
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
@@ -246,5 +278,16 @@ func _build_ui() -> void:
 	crt.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var crt_material := ShaderMaterial.new()
 	crt_material.shader = load("res://shaders/crt.gdshader") as Shader
+	crt_material.set_shader_parameter(&"intensity", 0.34)
 	crt.material = crt_material
-	_panel.add_child(crt)
+	_game_host.add_child(crt)
+	crt.z_index = 2
+	_fit_panel()
+
+
+func _fit_panel() -> void:
+	var view: Vector2 = get_viewport().get_visible_rect().size
+	var available: Vector2 = (view - Vector2(24.0, 24.0)).max(Vector2.ONE)
+	var factor: float = minf(1.0, minf(available.x / PANEL_SIZE.x, available.y / PANEL_SIZE.y))
+	_panel.scale = Vector2.ONE * factor
+	_panel.position = ((view - PANEL_SIZE * factor) * 0.5).floor()

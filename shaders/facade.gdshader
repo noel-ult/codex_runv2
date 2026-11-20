@@ -30,24 +30,23 @@ void vertex() {
 	v_wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 }
 
-// Height field of the wall surface (1 = face, 0 = recessed). Used for bump + mortar.
-float wall_height(vec2 p, float style, out vec2 cell) {
-	if (style < 0.5) {
-		vec2 q = p / vec2(0.25, 0.08);
-		float row = floor(q.y);
-		q.x += mod(row, 2.0) * 0.5;
-		cell = floor(q);
-		vec2 f = fract(q);
-		float mx = smoothstep(0.0, 0.05, f.x) * smoothstep(0.0, 0.05, 1.0 - f.x);
-		float my = smoothstep(0.0, 0.14, f.y) * smoothstep(0.0, 0.14, 1.0 - f.y);
-		return mx * my;
-	}
-	vec2 q = p / vec2(1.8, 1.7);
+// Rounded masonry edges in world metres. Screen coverage softens the color seam;
+// the sharper physical edge contributes to the normal only while it can resolve.
+float masonry(vec2 p, bool brick, float footprint, out vec2 cell, out vec2 slope) {
+	vec2 tile = brick ? vec2(0.25, 0.08) : vec2(1.8, 1.7);
+	vec2 q = p / tile;
+	q.x += brick ? mod(floor(q.y), 2.0) * 0.5 : 0.0;
 	cell = floor(q);
 	vec2 f = fract(q);
-	float sx = smoothstep(0.0, 0.012, f.x) * smoothstep(0.0, 0.012, 1.0 - f.x);
-	float sy = smoothstep(0.0, 0.012, f.y) * smoothstep(0.0, 0.012, 1.0 - f.y);
-	return sx * sy;
+	vec2 edge = min(f, 1.0 - f) * tile;
+	float width = brick ? 0.011 : 0.032;
+	vec2 t = clamp(edge / width, vec2(0.0), vec2(1.0));
+	vec2 rounded = t * t * (3.0 - 2.0 * t);
+	slope = 6.0 * t * (1.0 - t) * rounded.yx * sign(0.5 - f) / width;
+	slope *= (brick ? 0.008 : 0.012) * (1.0 - smoothstep(width * 0.55, width * 2.0, footprint));
+	vec2 face = smoothstep(vec2(0.0), vec2(width + min(footprint, width) * 0.3), edge);
+	float lod = smoothstep(tile.y * 0.20, tile.y * 0.75, footprint);
+	return mix(face.x * face.y, brick ? 0.82 : 0.97, lod);
 }
 
 void fragment() {
@@ -81,37 +80,37 @@ void fragment() {
 		vec3 emission = vec3(0.0);
 		vec2 grad = vec2(0.0);
 
-		// Base wall material.
-		vec2 cell;
-		float e = 0.004;
-		float hw = wall_height(uv, style, cell);
-		vec2 tmp;
-		grad.x = (wall_height(uv + vec2(e, 0.0), style, tmp) - hw) / e;
-		grad.y = (wall_height(uv + vec2(0.0, e), style, tmp) - hw) / e;
-		float lod = smoothstep(0.012, 0.05, length(fwidth(uv)));
-		hw = mix(hw, 0.82, lod);
-		grad *= 1.0 - lod;
+		// Large stains survive far down the street. Fine surface grain fades before
+		// it can shimmer, while the lower frequency mottling stays visible.
+		float footprint = max(length(dFdx(uv)), length(dFdy(uv)));
+		float grain_weight = 1.0 - smoothstep(0.01, 0.045, footprint);
 		float stains = fbm3(uv * vec2(0.6, 0.25) + seed * 5.0);
 		float streak = vnoise(vec2(uv.x * 2.2, uv.y * 0.12 + seed));
-		if (style < 0.5) {
+		if (style < 1.5) {
+			bool brick = style < 0.5;
+			vec2 cell;
+			float face = masonry(uv, brick, footprint, cell, grad);
 			float tone = hash12(cell + seed * 13.0);
-			vec3 brick = wall_color.rgb * mix((0.72 + 0.5 * tone) * (0.9 + 0.2 * vnoise(uv * 40.0)), 0.97, lod);
-			vec3 mortar = vec3(0.42, 0.4, 0.37);
-			albedo = mix(mortar, brick, hw);
-			rough = mix(0.95, 0.82, hw);
-			grad *= 0.012;
-		} else if (style < 1.5) {
-			float tone = hash12(cell + seed * 7.0);
-			albedo = wall_color.rgb * (0.88 + 0.18 * tone) * (0.85 + 0.3 * stains);
-			albedo *= 1.0 - 0.25 * smoothstep(0.55, 0.9, streak);
-			albedo = mix(albedo * 0.45, albedo, hw);
-			rough = 0.88;
-			grad *= 0.004;
+			float grains = (vnoise(uv * 32.0 + seed) - 0.5) * grain_weight;
+			float mottling = vnoise(uv * 6.0 + seed);
+			if (brick) {
+				float variation = mix(tone, 0.5, smoothstep(0.02, 0.065, footprint));
+				vec3 clay = wall_color.rgb * mix(vec3(0.74, 0.71, 0.7), vec3(1.18, 1.26, 1.29), variation);
+				clay *= (0.84 + 0.32 * mottling + 0.25 * grains) * (0.82 + 0.36 * stains);
+				vec3 mortar = vec3(0.29, 0.26, 0.22) * (0.78 + 0.38 * mottling);
+				albedo = mix(mortar, clay, face);
+				rough = mix(0.96, 0.73 + 0.16 * mottling, face);
+			} else {
+				albedo = wall_color.rgb * (0.81 + 0.36 * tone) * (0.82 + 0.36 * stains);
+				albedo *= 0.89 + 0.23 * mottling + 0.20 * grains;
+				albedo *= 1.0 - 0.28 * smoothstep(0.55, 0.9, streak);
+				albedo = mix(albedo * 0.44, albedo, face);
+				rough = 0.78 + 0.17 * mottling;
+			}
 		} else {
-			albedo = vec3(0.05, 0.06, 0.07);
-			rough = 0.1;
-			metal = 0.5;
-			grad = vec2(0.0);
+			albedo = wall_color.rgb * (0.2 + 0.12 * stains);
+			rough = 0.28;
+			metal = 0.38;
 		}
 
 		// Ground grime.
@@ -134,13 +133,15 @@ void fragment() {
 				float mull = step(abs(fu - 0.5), 0.008);
 				float lit = step(shop, 0.78);
 				vec3 interior = mix(vec3(1.0, 0.74, 0.48), vec3(0.7, 0.85, 1.0), step(0.65, hash12(vec2(ci, 9.0 + seed))));
-				float depth = smoothstep(3.2, 0.4, h) * (0.55 + 0.45 * vnoise(vec2(uv.x * 3.0, h * 2.0) + ci));
+				float depth = (1.0 - smoothstep(0.4, 3.2, h)) * (0.55 + 0.45 * vnoise(vec2(uv.x * 3.0, h * 2.0) + ci));
 				// Shelving / display silhouettes inside the shop.
 				float shelves = step(0.5, fract(h * 1.6)) * step(0.35, vnoise(vec2(uv.x * 5.0, ci)));
 				float displays = 1.0 - 0.75 * shelves * step(h, 2.2);
-				albedo = mix(vec3(0.02, 0.025, 0.03), vec3(0.08), mull);
-				rough = mix(0.04, 0.5, mull);
-				metal = 0.3;
+				float reflected_sky = smoothstep(0.5, 2.8, h + (shop - 0.5) * 0.65);
+				vec3 shop_glass = mix(vec3(0.023, 0.03, 0.033), vec3(0.07, 0.11, 0.135), reflected_sky);
+				albedo = mix(shop_glass, vec3(0.08), mull);
+				rough = mix(0.12 + 0.08 * streak, 0.5, mull);
+				metal = 0.27;
 				emission = interior * depth * displays * lit * 0.42 * (1.0 - mull) * mix(0.45, 1.0, night_factor);
 				grad = vec2(0.0);
 			} else if (!pillar && h >= 3.1 && h < 3.85) {
@@ -201,13 +202,23 @@ void fragment() {
 					vec3 cool = vec3(0.62, 0.8, 1.0);
 					vec3 tint = mix(warm, cool, step(0.72, hash13(id + 4.1)));
 					float bright = 0.55 + 0.9 * hash13(id + 8.3);
-					float ceiling = smoothstep(1.0, 0.55, lv) * 0.6 + 0.4;
-					float blinds = hash13(id + 2.7) < 0.35 ? (0.55 + 0.45 * step(0.5, fract(lv * 16.0))) : 1.0;
+					float ceiling = 1.0 - 0.6 * smoothstep(0.55, 1.0, lv);
+					float slat = lv * 16.0;
+					float slat_visibility = 1.0 - smoothstep(0.18, 0.6, footprint * 16.0 / (floor_height * (v1 - v0)));
+					float blinds = hash13(id + 2.7) < 0.35 ? 0.78 + (step(0.5, fract(slat)) - 0.5) * 0.45 * slat_visibility : 1.0;
 					float half_shade = hash13(id + 6.6) < 0.25 ? step(lv, 0.55) : 1.0;
 					float room = 0.75 + 0.25 * vnoise(vec2(lu * 4.0, lv * 3.0) + id.xy * 7.0);
-					albedo = vec3(0.025, 0.03, 0.036);
-					rough = 0.05;
-					metal = 0.4;
+					// Each pane bends the sky colors differently. The softly darker bottom
+					// and reveal give unlit windows a sense of depth, even on overcast days.
+					float glass_tone = hash13(id + 12.7);
+					float horizon = smoothstep(0.12, 0.88, lv + (glass_tone - 0.5) * 0.4);
+					float edge = min(min(lu, 1.0 - lu), min(lv, 1.0 - lv));
+					float reveal = mix(0.65, 1.0, smoothstep(0.025, 0.15, edge));
+					vec3 glass = mix(vec3(0.027, 0.038, 0.052), vec3(0.11, 0.16, 0.21), horizon);
+					float glazing = style > 1.5 ? 1.0 : 0.72;
+					albedo = glass * (0.78 + 0.52 * glass_tone) * reveal * glazing;
+					rough = mix(0.11, 0.30, glass_tone) + 0.08 * streak;
+					metal = 0.20 + 0.18 * glazing;
 					emission = tint * bright * ceiling * blinds * half_shade * room * lit * window_energy * mix(0.35, 1.0, night_factor);
 					grad = vec2(0.0);
 				}

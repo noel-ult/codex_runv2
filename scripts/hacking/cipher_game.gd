@@ -21,7 +21,7 @@ func title() -> String:
 
 
 func help_text() -> String:
-	return "A/D  slot    W/S  glyph    ENTER  submit    ● exact  ○ misplaced"
+	return "A/D  slot    W/S  glyph    ENTER  submit    ● exact  ○ misplaced    no repeats"
 
 
 func _setup() -> void:
@@ -56,11 +56,20 @@ func key_pressed(keycode: Key) -> void:
 func _submit() -> void:
 	var exact: int = 0
 	var partial: int = 0
+	var matched: PackedByteArray = PackedByteArray()
+	matched.resize(SLOTS)
 	for i: int in SLOTS:
 		if _guess[i] == _code[i]:
 			exact += 1
-		elif _code.has(_guess[i]):
-			partial += 1
+			matched[i] = 1
+	for i: int in SLOTS:
+		if _guess[i] == _code[i]:
+			continue
+		for j: int in SLOTS:
+			if matched[j] == 0 and _guess[i] == _code[j]:
+				partial += 1
+				matched[j] = 1
+				break
 	_history.append(_guess.duplicate())
 	_feedback.append(Vector2i(exact, partial))
 	if exact == SLOTS:

@@ -12,6 +12,7 @@ signal captured(total_captures: int)
 signal feedback(message: String)
 signal disguise_changed(active: bool, role: String, seconds_left: float)
 signal stance_changed(stance: int)
+signal vehicle_changed(driving: bool)
 
 enum Stance { STANDING, CROUCHED, PRONE }
 
@@ -53,6 +54,8 @@ enum Stance { STANDING, CROUCHED, PRONE }
 var captures: int = 0
 var carrying_device: bool = false
 var input_enabled: bool = true
+## Main supplies the safehouse boundary without coupling movement to Hunter systems.
+var shelter_check: Callable
 
 var _spawn_transform: Transform3D
 var _dash_time_left: float = 0.0
@@ -79,6 +82,9 @@ var _restricted_count: int = 0
 var _disguise_tick: float = 0.0
 var stance: Stance = Stance.STANDING
 var _capsule: CapsuleShape3D
+var _driven_vehicle: Node3D
+var _on_foot_collision_mask: int = 0
+var _vehicle_exit_released: bool = true
 
 @onready var _codex: CodexSignalSystem = $CodexSignalSystem
 @onready var _camera_pivot: Node3D = $CameraPivot
@@ -134,7 +140,47 @@ func collect_pickup(kind: StringName, amount: int) -> bool:
 
 
 func get_view_camera() -> Camera3D:
+	if is_driving():
+		return _driven_vehicle.call(&"get_drive_camera") as Camera3D
 	return _camera
+
+
+func is_driving() -> bool:
+	return is_instance_valid(_driven_vehicle)
+
+
+func enter_vehicle(vehicle: Node3D) -> bool:
+	if is_driving() or not input_enabled or not is_instance_valid(vehicle):
+		return false
+	_driven_vehicle = vehicle
+	_on_foot_collision_mask = collision_mask
+	collision_mask = 0
+	_dash_time_left = 0.0
+	_hold_time = 0.0
+	_interactable = null
+	_tether_left = 0.0
+	_codex.set_full_form(false)
+	set_stance(Stance.STANDING)
+	_visual.hide()
+	_aura.emitting = false
+	_dash_trail.emitting = false
+	_set_prompt("", -1.0)
+	vehicle_changed.emit(true)
+	return true
+
+
+func leave_vehicle(exit_position: Vector3) -> void:
+	_driven_vehicle = null
+	collision_mask = _on_foot_collision_mask
+	global_position = exit_position
+	velocity = Vector3.ZERO
+	_visual.show()
+	_camera.make_current()
+	_interactable = null
+	_hold_time = 0.0
+	# An exit press must not immediately start an on-foot interaction.
+	_vehicle_exit_released = false
+	vehicle_changed.emit(false)
 
 
 func get_head_position() -> Vector3:
@@ -151,6 +197,8 @@ func set_carrying_device(carrying: bool) -> void:
 
 
 func teleport(target: Vector3) -> void:
+	if is_driving():
+		_driven_vehicle.call(&"force_exit_for_capture")
 	global_position = target
 	velocity = Vector3.ZERO
 
@@ -225,6 +273,10 @@ func _update_disguise(delta: float) -> void:
 
 ## Hunter Tether Harpoon: slows the Runner and reels them toward the anchor.
 func apply_tether(anchor: Vector3, duration: float) -> void:
+	if is_driving():
+		return
+	if shelter_check.is_valid() and bool(shelter_check.call()):
+		return
 	_tether_left = maxf(_tether_left, duration)
 	_tether_anchor = anchor
 	_shake = maxf(_shake, 0.35)
@@ -244,6 +296,8 @@ func is_impaired() -> bool:
 
 ## Called (via signal wiring in main) when a Hunter reaches the Runner.
 func on_caught() -> void:
+	if is_driving():
+		_driven_vehicle.call(&"force_exit_for_capture")
 	captures += 1
 	global_transform = _spawn_transform
 	velocity = Vector3.ZERO
@@ -258,6 +312,8 @@ func on_caught() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_driving():
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var motion := event as InputEventMouseMotion
 		_camera_pivot.rotate_y(-motion.relative.x * mouse_sensitivity)
@@ -273,6 +329,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if is_driving():
+		_slow_left = maxf(_slow_left - delta, 0.0)
+		_dash_cooldown_left = maxf(_dash_cooldown_left - delta, 0.0)
+		_super_jump_cooldown_left = maxf(_super_jump_cooldown_left - delta, 0.0)
+		_update_disguise(delta)
+		return
+	if _tether_left > 0.0 and shelter_check.is_valid() and bool(shelter_check.call()):
+		_tether_left = 0.0
 	_dash_cooldown_left = maxf(_dash_cooldown_left - delta, 0.0)
 	_super_jump_cooldown_left = maxf(_super_jump_cooldown_left - delta, 0.0)
 
@@ -287,7 +351,7 @@ func _physics_process(delta: float) -> void:
 		_handle_form_toggle()
 		_handle_jumps()
 		_handle_micro_dash(move_direction)
-		_gadgets.handle_input()
+		_gadgets.handle_input(delta)
 	_apply_horizontal_movement(move_direction, delta)
 	_handle_interaction(delta)
 
@@ -478,6 +542,10 @@ func _animate(delta: float) -> void:
 # --- Interaction ----------------------------------------------
 
 func _handle_interaction(delta: float) -> void:
+	if not _vehicle_exit_released:
+		_vehicle_exit_released = not Input.is_action_pressed(&"interact")
+		_set_prompt("", -1.0)
+		return
 	var nearest: Interactable = _find_interactable() if input_enabled else null
 	if nearest != _interactable:
 		_interactable = nearest

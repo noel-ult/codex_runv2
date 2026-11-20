@@ -15,6 +15,7 @@ signal aim_target_changed(has_target: bool, label: String)
 const GADGET_JAMMER: StringName = &"jammer"
 const GADGET_EMP: StringName = &"emp"
 const GADGET_DECOY: StringName = &"decoy"
+const AIM_PREVIEW_INTERVAL: float = 0.05
 
 @export var decoy_cell_cost: int = 2
 @export var max_active_decoys: int = 2
@@ -42,6 +43,7 @@ var _player: PlayerController
 var _decoys: Array[DecoyEmitter] = []
 var _order: Array[StringName] = [GADGET_JAMMER, GADGET_EMP, GADGET_DECOY]
 var _aim_label: String = ""
+var _aim_preview_left: float = 0.0
 
 
 func _ready() -> void:
@@ -69,7 +71,7 @@ func publish() -> void:
 
 
 ## Called by the PlayerController while input is enabled.
-func handle_input() -> void:
+func handle_input(delta: float) -> void:
 	if Input.is_action_just_pressed(&"gadget_1"):
 		_select(GADGET_JAMMER)
 	elif Input.is_action_just_pressed(&"gadget_2"):
@@ -80,7 +82,11 @@ func handle_input() -> void:
 		_cycle(1)
 	elif Input.is_action_just_pressed(&"gadget_prev"):
 		_cycle(-1)
-	_update_aim()
+	# Throttle only the HUD preview. The dart still queries the exact shot frame.
+	_aim_preview_left -= delta
+	if _aim_preview_left <= 0.0:
+		_aim_preview_left = AIM_PREVIEW_INTERVAL
+		_update_aim()
 	if Input.is_action_just_pressed(&"use_gadget") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		use_selected()
 
@@ -116,7 +122,8 @@ func find_dart_target() -> Dictionary:
 			return {"node": direct, "point": hit.get("position")}
 	var best: Node = null
 	var best_point: Vector3 = Vector3.ZERO
-	var best_angle: float = deg_to_rad(dart_assist_degrees)
+	var best_alignment: float = cos(deg_to_rad(dart_assist_degrees))
+	var range_squared: float = dart_range * dart_range
 	var candidates: Array[Node3D] = []
 	for node: Node in _player.get_tree().get_nodes_in_group(Electronics.HITBOX_GROUP):
 		var box := node as Node3D
@@ -129,10 +136,11 @@ func find_dart_target() -> Dictionary:
 	for candidate: Node3D in candidates:
 		var point: Vector3 = candidate.global_position + (Vector3(0.0, 1.3, 0.0) if candidate.is_in_group(Electronics.EMP_GROUP) else Vector3.ZERO)
 		var to: Vector3 = point - origin
-		if to.length() > dart_range or to.length() < 0.5:
+		var distance_squared: float = to.length_squared()
+		if distance_squared > range_squared or distance_squared < 0.25:
 			continue
-		var angle: float = forward.angle_to(to)
-		if angle >= best_angle:
+		var alignment: float = forward.dot(to) / sqrt(distance_squared)
+		if alignment <= best_alignment:
 			continue
 		var los := PhysicsRayQueryParameters3D.create(origin, point, GeometryKit.WORLD_LAYER | GeometryKit.DOOR_LAYER, [_player.get_rid()])
 		var blocked: Dictionary = space.intersect_ray(los)
@@ -145,7 +153,7 @@ func find_dart_target() -> Dictionary:
 			continue
 		best = owner_device
 		best_point = point
-		best_angle = angle
+		best_alignment = alignment
 	if best == null:
 		return {}
 	return {"node": best, "point": best_point}
@@ -209,6 +217,7 @@ func spend_parts(cost: int) -> bool:
 
 func _select(gadget: StringName) -> void:
 	selected = gadget
+	_aim_preview_left = 0.0
 	publish()
 
 

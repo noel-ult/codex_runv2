@@ -5,7 +5,7 @@ render_mode diffuse_burley, specular_schlick_ggx;
 
 #include "res://shaders/common.gdshaderinc"
 
-uniform vec4 slab_color : source_color = vec4(0.36, 0.35, 0.34, 1.0);
+uniform vec4 slab_color : source_color = vec4(0.40, 0.39, 0.38, 1.0);
 uniform float slab_size = 1.2;
 global uniform float wetness;
 
@@ -27,11 +27,12 @@ void fragment() {
 	float tone = hash12(cell);
 	float speck = vnoise(p * 30.0);
 	float stain = fbm3(p * 0.3);
+	float aggregate = vnoise(p * 10.0 + 4.7);
 	float gum = step(0.985, hash12(floor(p * 6.0)));
-	vec3 col = slab_color.rgb * (0.82 + 0.25 * tone) * (0.85 + 0.25 * speck) * (0.8 + 0.3 * stain);
+	vec3 col = slab_color.rgb * (0.74 + 0.38 * tone) * (0.82 + 0.32 * speck) * (0.78 + 0.4 * stain) * (0.9 + 0.2 * aggregate);
 	col = mix(col * 0.35, col, joint);
 	col = mix(col, vec3(0.08), gum * 0.6);
 	float damp = smoothstep(0.58, 0.7, fbm3(p * 0.15 + 2.0)) * clamp(wetness * 1.4, 0.0, 1.0);
-	ALBEDO = mix(col, col * 0.6, damp);
-	ROUGHNESS = mix(0.86, 0.25, damp);
+	ALBEDO = mix(col, col * 0.76, damp);
+	ROUGHNESS = mix(0.88, 0.38, damp);
 }

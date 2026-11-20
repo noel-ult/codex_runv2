@@ -22,8 +22,8 @@ signal site_sweep_scanning(site: Vector3, active: bool)
 ## A Codex Release was heard; `responders` hunters were dispatched to `world_position`.
 signal release_heard(world_position: Vector3, responders: int)
 signal drone_launched(search_position: Vector3)
-## The Runner jacked into a Hunter's suit; the mission resolves it via `resolve_suit_hack`.
-signal suit_hack_started(hunter_id: int)
+## The Runner copied an encrypted packet without opening a terminal beside the Hunter.
+signal suit_packet_copied()
 
 @export var hunter_scene: PackedScene
 @export var hunter_count: int = 4
@@ -46,8 +46,13 @@ signal suit_hack_started(hunter_id: int)
 @export var sweep_interval: float = 28.0
 @export var sweep_scan_duration: float = 9.0
 
+## Set by main. Only the physical hideout shelters the Runner from capture.
+var runner_is_sheltered: Callable
+
 var _hunters: Array[HunterAgent] = []
 var _active_decoys: Array[Node3D] = []
+var _relay_spoof: Node3D
+var _relay_spoof_expires: float = 0.0
 var _echoes: Array[ResidualEcho] = []
 ## echo instance id -> Array[int] of hunter ids that already searched it.
 var _investigated: Dictionary = {}
@@ -58,6 +63,8 @@ var _grace_left: float = 0.0
 var _census: Vector4i = Vector4i(-1, -1, -1, -1)
 var _clock: float = 0.0
 var _has_site: bool = false
+var _lockdown_active: bool = false
+var _suit_extraction_enabled: bool = true
 var _site: Vector3 = Vector3.ZERO
 var _sweep_timer: float = 0.0
 var _sweeper: HunterAgent
@@ -94,7 +101,8 @@ func spawn_hunters(spawn_points: Array[Vector3], patrol_points: Array[Vector3]) 
 		hunter.sweep_scan_started.connect(_on_sweep_scan_started)
 		hunter.sweep_finished.connect(_on_sweep_finished)
 		hunter.weapon_report.connect(func(_h: HunterAgent, at: Vector3) -> void: report_signal(at))
-		hunter.suit_port_accessed.connect(_on_suit_port_accessed)
+		hunter.set_suit_extraction_enabled(_suit_extraction_enabled)
+		hunter.suit_packet_extracted.connect(_on_suit_packet_extracted)
 		_hunters.append(hunter)
 	_emit_census()
 
@@ -110,7 +118,7 @@ func set_guarded_site(site: Vector3, nearby_patrol_points: Array[Vector3]) -> vo
 
 ## Any system may report the Runner's position (Ignition broadcast, security alarm, uplink).
 func report_signal(world_position: Vector3) -> void:
-	if _grace_left > 0.0:
+	if _grace_left > 0.0 or _is_runner_sheltered():
 		return
 	_live_position = world_position
 	_last_live_time = _clock
@@ -118,22 +126,34 @@ func report_signal(world_position: Vector3) -> void:
 
 ## Called (via signal wiring in main) after the Runner has been captured and respawned.
 func on_runner_respawned(_total_captures: int) -> void:
+	reset_mission_alert()
+
+
+## Reset the current HunterNet alarm and temporary guard routes after capture.
+func reset_mission_alert() -> void:
+	_clear_relay_spoof()
 	_grace_left = capture_grace_period
 	_last_live_time = -1000.0
+	_live_position = Vector3.ZERO
+	_lockdown_active = false
+	_sweep_timer = first_sweep_delay
+	_decision_left = 0.0
+	_echoes.clear()
+	_investigated.clear()
 	for hunter: HunterAgent in _hunters:
-		hunter.command_patrol()
+		hunter.reset_mission_alert()
+	_sweeper = null
+	for child: Node in get_children():
+		if child is SeekerDrone or child is SonarGrenade or child is TetherHarpoon:
+			child.queue_free()
+	_drones.clear()
+	_drone_cd = 0.0
 
 
-## Ends a suit hack: on failure the Hunter wakes up alerted to the Runner's position.
-func resolve_suit_hack(hunter_id: int, success: bool, runner_position: Vector3) -> void:
+func set_suit_extraction_enabled(enabled: bool) -> void:
+	_suit_extraction_enabled = enabled
 	for hunter: HunterAgent in _hunters:
-		if hunter.hunter_id != hunter_id:
-			continue
-		hunter.end_diagnostic()
-		if not success:
-			_grace_left = 0.0
-			report_signal(runner_position)
-		return
+		hunter.set_suit_extraction_enabled(enabled)
 
 
 ## HunterNet lockdown after a database breach: every Hunter converges and the guard is doubled.
@@ -145,24 +165,50 @@ func trigger_lockdown(alarm_position: Vector3, guarded_site: Vector3) -> void:
 	for i: int in 4:
 		ring.append(guarded_site + Vector3(cos(TAU * float(i) / 4.0), 0.0, sin(TAU * float(i) / 4.0)) * 7.0)
 	for hunter: HunterAgent in _hunters:
-		hunter.add_patrol_points(ring)
-	sweep_interval = 14.0
+		hunter.set_lockdown_patrol_points(ring)
+	_lockdown_active = true
 	_sweep_timer = 6.0
 
 
-func _on_suit_port_accessed(hunter: HunterAgent, _actor: Node3D) -> void:
-	hunter.begin_diagnostic(30.0)
-	suit_hack_started.emit(hunter.hunter_id)
+func _on_suit_packet_extracted() -> void:
+	if _suit_extraction_enabled:
+		suit_packet_copied.emit()
 
 
 func get_hunters() -> Array[HunterAgent]:
 	return _hunters.duplicate()
 
 
+## Use the regular decoy dispatch and proximity rules for the false relay broadcast.
+func deploy_relay_spoof(world_position: Vector3, duration: float) -> void:
+	_clear_relay_spoof()
+	_relay_spoof = Node3D.new()
+	_relay_spoof.name = "RelaySpoof"
+	add_child(_relay_spoof)
+	_relay_spoof.global_position = world_position
+	_relay_spoof_expires = _clock + duration
+	# Assign the feature's diversion before any player-deployed decoys.
+	_active_decoys.push_front(_relay_spoof)
+	_decision_left = 0.0
+
+
+func _clear_relay_spoof() -> void:
+	if _relay_spoof == null:
+		return
+	_active_decoys.erase(_relay_spoof)
+	_relay_spoof.queue_free()
+	_relay_spoof = null
+	_decision_left = 0.0
+
+
 func _physics_process(delta: float) -> void:
 	_clock += delta
+	if _relay_spoof != null and _clock >= _relay_spoof_expires:
+		_clear_relay_spoof()
 	_drone_cd -= delta
 	_grace_left = maxf(_grace_left - delta, 0.0)
+	if _grace_left > 0.0:
+		return
 	_update_sweeps(delta)
 	_decision_left -= delta
 	if _decision_left <= 0.0:
@@ -170,8 +216,8 @@ func _physics_process(delta: float) -> void:
 		_run_decisions()
 
 
-func _is_live() -> bool:
-	return _grace_left <= 0.0 and _clock - _last_live_time <= live_signal_timeout
+func _is_runner_sheltered() -> bool:
+	return runner_is_sheltered.is_valid() and bool(runner_is_sheltered.call())
 
 
 func _update_sweeps(delta: float) -> void:
@@ -194,13 +240,16 @@ func _update_sweeps(delta: float) -> void:
 		return
 	if best.command_sweep(_site, sweep_scan_duration):
 		_sweeper = best
-		_sweep_timer = sweep_interval
+		_sweep_timer = minf(sweep_interval, 14.0) if _lockdown_active else sweep_interval
 		site_sweep_dispatched.emit(_site)
 
 
 func _run_decisions() -> void:
 	_prune()
-	var live: bool = _is_live()
+	var sheltered: bool = _is_runner_sheltered()
+	if sheltered:
+		_last_live_time = -1000.0
+	var live: bool = _clock - _last_live_time <= live_signal_timeout
 	var assigned: Dictionary = {}
 
 	for beacon: Node3D in _active_decoys:
@@ -226,7 +275,8 @@ func _run_decisions() -> void:
 			continue
 		if hunter.state == HunterAgent.State.APEX_PURSUIT:
 			hunter.command_investigate(hunter.last_known_position, -1)
-			_launch_drone(hunter.global_position, hunter.last_known_position)
+			if not sheltered:
+				_launch_drone(hunter.global_position, hunter.last_known_position)
 			continue
 		var echo: ResidualEcho = _best_echo_for(hunter)
 		if echo != null:
@@ -318,8 +368,8 @@ func _emit_census() -> void:
 # --- Signal handlers -------------------------------------------------------------
 
 ## Every Hunter within the pulse radius converges on the Release point (APEX hunters keep chasing).
-func _on_codex_released(world_position: Vector3, radius: float, _from_decoy: bool) -> void:
-	if _grace_left > 0.0:
+func _on_codex_released(world_position: Vector3, radius: float, from_decoy: bool) -> void:
+	if _grace_left > 0.0 or (not from_decoy and _is_runner_sheltered()):
 		return
 	var responders: int = 0
 	for hunter: HunterAgent in _hunters:
@@ -333,7 +383,7 @@ func _on_codex_released(world_position: Vector3, radius: float, _from_decoy: boo
 
 
 func _on_echo_dropped(echo: ResidualEcho) -> void:
-	if _grace_left > 0.0:
+	if _grace_left > 0.0 or _is_runner_sheltered():
 		return
 	_echoes.append(echo)
 	echo.expired.connect(_on_echo_expired)
@@ -369,7 +419,7 @@ func _on_investigation_finished(hunter: HunterAgent, echo_id: int) -> void:
 
 
 func _on_runner_touched(_hunter: HunterAgent) -> void:
-	if _grace_left > 0.0:
+	if _grace_left > 0.0 or _is_runner_sheltered():
 		return
 	_grace_left = capture_grace_period
 	_last_live_time = -1000.0

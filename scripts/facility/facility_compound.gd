@@ -168,6 +168,17 @@ func _build_perimeter() -> void:
 		hack_completed.emit("Side door hacked", side_door_resonance))
 
 
+## Revoke the access earned during the failed heist.
+func reset_mission_access() -> void:
+	server_door.close()
+	server_door_panel.enabled = true
+	side_door.close()
+	var side_panel: Interactable = get_node("SideDoorPanel") as Interactable
+	side_panel.enabled = true
+	bay_shutter.access_groups = PackedStringArray(["hunters", "facility_staff"])
+	bay_shutter.close()
+
+
 func _wall_segment(center: Vector3, size: Vector3, material: Material, tint: Color) -> void:
 	var mesh := GeometryKit.solid_box(self, center, size, material)
 	mesh.set_instance_shader_parameter(&"tint", tint)

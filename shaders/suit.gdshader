@@ -24,12 +24,6 @@ void fragment() {
 	float rough = roughness_value;
 	vec3 emission = vec3(0.0);
 
-	// Woven micro texture.
-	vec2 weave_uv = vec2(around * 90.0, along * uv_scale_v * 14.0);
-	float weave = 0.5 + 0.25 * sin(weave_uv.x * 3.14159) * sin(weave_uv.y * 3.14159);
-	float grain = vnoise(weave_uv * 0.7);
-	col *= 0.88 + 0.16 * weave + 0.08 * grain;
-
 	if (pattern < 0.5) {
 		// Techwear: contrasting side panels, front zipper, cuffs, seam lines.
 		float side = smoothstep(0.06, 0.05, abs(fract(around + 0.0) - 0.0)) + smoothstep(0.06, 0.05, abs(around - 0.5));
@@ -59,6 +53,16 @@ void fragment() {
 		col *= 1.0 - 0.25 * seam;
 	}
 
+	// Keep broad folds visible at gameplay distance and fade the weave as its threads become subpixel.
+	vec2 weave_uv = vec2(around * 44.0, along * uv_scale_v * 8.0);
+	vec2 thread_angle = weave_uv * 6.283185;
+	float weave_detail = 1.0 - smoothstep(0.22, 0.75, length(fwidth(weave_uv)));
+	float weave = sin(thread_angle.x) * sin(thread_angle.y) * weave_detail;
+	float fold_angle = (around * 5.0 + along * 0.62 + 0.11 * sin(along * 13.0)) * 6.283185;
+	float folds = sin(fold_angle) * 0.7 + sin(fold_angle * 2.0 + along * 18.0) * 0.3;
+	col *= 1.0 + folds * 0.075 + weave * 0.075;
+	rough += folds * 0.05;
+
 	// Cuff / hem darkening at the ends of each part.
 	float hem = smoothstep(0.04, 0.0, along) + smoothstep(0.96, 1.0, along);
 	col *= 1.0 - 0.3 * hem;
@@ -66,6 +70,7 @@ void fragment() {
 	ALBEDO = col;
 	ROUGHNESS = rough;
 	EMISSION = emission;
-	float bump = (weave - 0.5) * 0.25 + (grain - 0.5) * 0.15;
-	NORMAL = normalize(NORMAL + vec3(bump * 0.3, bump * 0.3, 0.0));
+	vec2 weave_slope = vec2(cos(thread_angle.x) * sin(thread_angle.y), sin(thread_angle.x) * cos(thread_angle.y));
+	vec2 fabric_slope = weave_slope * weave_detail * 0.19 + vec2(cos(fold_angle), cos(fold_angle + along * 4.0) * 0.4) * 0.10;
+	NORMAL_MAP = normalize(vec3(fabric_slope, 1.0)) * 0.5 + 0.5;
 }
