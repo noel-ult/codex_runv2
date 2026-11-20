@@ -23,6 +23,7 @@ var _root: Control
 var _compass: Control
 var _threat_label: Label
 var _threat_sub: Label
+var _clock_label: Label
 var _objective_label: Label
 var _objective_log: VBoxContainer
 var _objective_lines: Array[Label] = []
@@ -170,6 +171,18 @@ func bind_mission(mission: MissionDirector) -> void:
 	mission.radio_message.connect(show_radio)
 	mission.mission_completed.connect(_on_mission_completed)
 	mission.lockdown_started.connect(func() -> void: _lockdown = true)
+
+
+func bind_environment(time: TimeOfDay, weather: WeatherSystem) -> void:
+	time.clock_tick.connect(func(hour: float) -> void:
+		var phase_text: String = {TimeOfDay.PHASE_NIGHT: "NIGHT", TimeOfDay.PHASE_DAWN: "DAWN", TimeOfDay.PHASE_DAY: "DAYLIGHT", TimeOfDay.PHASE_DUSK: "DUSK"}.get(time.phase, "")
+		_clock_label.text = "%s  ·  %s  ·  %s" % [TimeOfDay.format_clock(hour), phase_text, weather.get_weather_name()]
+		_clock_label.add_theme_color_override(&"font_color", AMBER if time.is_daytime() else DIM))
+
+
+## Shows / updates a compass marker (used by systems other than the mission, e.g. the hideout).
+func set_marker(marker_id: StringName, world_position: Vector3, label_text: String, color: Color, shown: bool) -> void:
+	_on_marker_changed(marker_id, world_position, label_text, color, shown)
 
 
 func bind_terminal(terminal: HackTerminal) -> void:
@@ -465,6 +478,9 @@ func _build_threat() -> void:
 	_threat_sub = _label(12, DIM)
 	_threat_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	box.add_child(_threat_sub)
+	_clock_label = _label(12, DIM)
+	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	box.add_child(_clock_label)
 
 
 func _build_objective() -> void:

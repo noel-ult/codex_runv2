@@ -86,7 +86,7 @@ func _can_see(target: Vector3) -> bool:
 		return false
 	var origin: Vector3 = _head.global_position
 	var to_target: Vector3 = target - origin
-	if to_target.length() > view_range:
+	if to_target.length() > view_range * WorldConditions.visibility:
 		return false
 	var forward: Vector3 = -global_basis.z
 	var flat_angle: float = Vector2(forward.x, forward.z).angle_to(Vector2(to_target.x, to_target.z))

@@ -17,3 +17,5 @@
 - Avoid `Array.filter()` with typed lambda params on arrays that may hold freed nodes (errors "Cannot convert argument 1 from Object to Object"); iterate with a `Variant` loop and `is_instance_valid` instead.
 - `ShaderMaterial.get_shader_parameter()` returns null until the parameter is set; track animated values in script vars.
 - Mission e2e testing: drive minigames by setting their private state via `set()` (e.g. SignalLock `_freq/_phase`, Breaker `_brick_kind`, Cipher `_guess` + push an Enter key event) and call `Interactable.complete(player)` to skip holds.
+- Environment: `TimeOfDay` is the single writer of sky/sun/moon/ambient/fog/lamps and the `night_factor` shader global; `WeatherSystem` writes the `wetness` global and rain. Both globals are declared in `project.godot` [shader_globals]. Gameplay reads `WorldConditions` (static) for visibility, day/night and drone grounding.
+- GDScript: `PackedFloat32Array([...])` etc. are not constant expressions - use a static function instead of a `const`.

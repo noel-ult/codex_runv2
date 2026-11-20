@@ -63,8 +63,46 @@ func _ready() -> void:
 	hideout.station_opened.connect(func(_actor: Node3D) -> void: _prep.open())
 	hideout.rest_requested.connect(func(_actor: Node3D) -> void: _rest_until_dusk())
 	_prep.rest_requested.connect(_rest_until_dusk)
-	_prep.opened_changed.connect(func(open: bool) -> void: _player.input_enabled = not open)
+	_prep.opened_changed.connect(func(open: bool) -> void:
+		_player.input_enabled = not open
+		_hud.visible = not open)
+	_hud.bind_environment(_time, _weather)
+	_hud.set_marker(&"hideout", hideout.get_marker_position(), "HIDEOUT", Color(0.95, 0.85, 0.6), true)
+	_time.phase_changed.connect(_on_phase_changed)
+	_weather.weather_changed.connect(_on_weather_changed)
+	_on_phase_changed(_time.phase)
 	_mission.start()
+
+
+## Daylight is dangerous: Releases reach further and come sooner, so lie low in the hideout.
+func _on_phase_changed(phase: StringName) -> void:
+	var codex: CodexSignalSystem = _player.get_codex()
+	match phase:
+		TimeOfDay.PHASE_DAY:
+			codex.daylight_radius_scale = 1.5
+			codex.daylight_interval_scale = 0.7
+			_hud.show_radio("Full daylight. The Codex burns louder in the sun - Releases reach further and come faster. Lie low at the hideout (west edge) or rest until dusk.")
+		TimeOfDay.PHASE_DAWN:
+			codex.daylight_radius_scale = 1.2
+			codex.daylight_interval_scale = 0.85
+			_hud.show_radio("Dawn is breaking. Get to the hideout before the city wakes up.")
+		TimeOfDay.PHASE_DUSK:
+			codex.daylight_radius_scale = 1.2
+			codex.daylight_interval_scale = 0.85
+			_hud.show_radio("Dusk. Prep your gear - night is when the Runner moves.")
+		_:
+			codex.daylight_radius_scale = 1.0
+			codex.daylight_interval_scale = 1.0
+
+
+func _on_weather_changed(weather_name: String) -> void:
+	match weather_name:
+		"FOG":
+			_hud.show_radio("Fog rolling in - cameras and drones can barely see. Good cover.")
+		"STORM":
+			_hud.show_radio("Storm front - Hunter drones are grounded and sensors are half-blind.")
+		"CLEAR":
+			_hud.show_radio("Skies clearing. Sensors at full range.")
 
 
 func _rest_until_dusk() -> void:

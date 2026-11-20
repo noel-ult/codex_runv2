@@ -244,7 +244,7 @@ func _launch_drone(from: Vector3, search_at: Vector3) -> void:
 		if is_instance_valid(item):
 			live_drones.append(item as SeekerDrone)
 	_drones = live_drones
-	if _drone_cd > 0.0 or _drones.size() >= max_drones:
+	if _drone_cd > 0.0 or _drones.size() >= max_drones or WorldConditions.drones_grounded:
 		return
 	_drone_cd = drone_cooldown
 	var drone := SeekerDrone.new()

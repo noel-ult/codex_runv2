@@ -46,6 +46,36 @@ Terminal minigames:
 - **Firewall Breaker:** A/D move the paddle and Space launches the probe. Destroy every CORE node; each dropped probe adds trace.
 - **Cipher:** A/D select a slot, W/S change the glyph, Enter submits. ● = right glyph in the right slot, ○ = right glyph in the wrong slot.
 
+## Day, night and weather
+
+- **Clock:** the city runs a 24 h day. Nights last longer (about 8 real minutes) than days (about 5 minutes).
+- **At dawn:** the sun rises, the sky brightens, street lamps switch off and fewer windows stay lit. At dusk it all reverses.
+- **Daylight is dangerous.** Codex Releases reach 50% further and come 30% sooner. Lie low in the **hideout**, the shielded `STORAGE 07` lock-up on the west edge (marked on the compass), or rest until dusk.
+- **Weather** cycles between clear, overcast, fog (favoured in the morning), drizzle and storm (favoured in the evening). It drives rain, fog, cloud, lightning and how wet the streets are.
+- **Weather changes stealth:**
+  - Fog and storms shrink camera, turret, searchlight and drone ranges.
+  - Storms ground the Seeker Drones.
+
+## The hideout and prep station
+
+Inside the hideout the Codex is masked. Use the **workbench** (E) to spend **salvage parts**. You get parts from salvage pickups around the city, from downed Seeker Drones (+2) and from hunter suit hacks (+3).
+
+| Fabricate | Cost |
+| --- | --- |
+| Jammer darts ×3 | 2 |
+| EMP charge | 3 |
+| Resonance Cell | 2 |
+
+| Upgrade (one-time) | Cost |
+| --- | --- |
+| Dart rack (+3 darts) | 5 |
+| EMP capacitor (+1 EMP) | 5 |
+| Decoy amplifier (+20 decoy charge) | 6 |
+| ID forger (+60 s disguise) | 4 |
+| Signature dampener (−15% Release radius) | 6 |
+
+During the day, the station or the **cot** lets you **rest until dusk** (19:00).
+
 ## The Codex
 
 - **Base Form**: slow and invisible to Hunters. They only know where you are from signals.
@@ -107,16 +137,17 @@ Civilians walk the sidewalks, and **lab technicians** commute between the SE bus
 
 ```
 Main (main.gd — composition root: the ONLY place systems are wired together)
-├── WorldEnvironment (night sky, volumetric fog, SSAO, SSR, glow) / Moon / Rain
+├── WorldEnvironment (sky, volumetric fog, SSAO, SSR, glow) / Moon (+ Sun) / Rain
+├── TimeOfDay (24 h clock, sun/moon/sky/lamps) · WeatherSystem (rain, fog, cloud, wetness, lightning)
 ├── NavigationRegion3D (navmesh baked at runtime from world-layer colliders)
 │   └── City (greybox_city_builder.gd)
 │        ├── BuildingFactory / PropFactory / VehicleModel   (procedural structures)
 │        ├── MeridianSignalLabs (facility_compound.gd: AutoGate, SlidingDoor, SecurityCamera,
 │        │                       SearchlightTower, LaserTripwire, SentryTurret, server room)
-│        ├── 4× UplinkStation, DeadZones, TrafficVehicles, Pickups, NpcWalkers
+│        ├── 4× UplinkStation, Hideout, DeadZones, TrafficVehicles, Pickups, NpcWalkers
 ├── Player (CharacterBody3D + HumanoidRig + CodexSignalSystem + GadgetBelt + camera rig)
 ├── HunterAIDirector → 4× hunter.tscn (HunterAgent + HumanoidRig + weapons) + SeekerDrones
-├── MissionDirector (objective chain) · HackTerminal (CRT minigames) · HUD
+├── MissionDirector (objective chain) · HackTerminal (CRT minigames) · PrepStationUI · HUD
 ```
 
 **Decoupling rules**
