@@ -4,18 +4,21 @@ extends Node3D
 ##
 ## Information flow is strictly one-way: CodexSignalSystem -> (signals) -> Director -> Hunters.
 ## The Director is handed the CodexSignalSystem by the scene's composition root via
-## `bind_codex()`; the Codex system never learns that the Director exists.
+## `bind_codex()`; the Codex system never learns that the Director exists. Other world
+## systems (security cameras, the uplink) feed positions in through `report_signal()`.
 ##
 ## Priority each decision tick:
 ##   1. CHASE_DECOY      - each active fake Codex beacon pulls its nearest `decoy_pull_count`
 ##                         Hunters, unless a Hunter is already right on top of the live signal.
-##   2. APEX_PURSUIT     - live Ignition coordinates are fresh.
+##   2. APEX_PURSUIT     - live coordinates (Ignition / alarm / uplink) are fresh.
 ##   3. INVESTIGATE_ECHO - lost live signal -> last known position, otherwise the best Residual Echo.
-##   4. PATROL
+##   4. PATROL           - including periodic sweeps of the guarded uplink site.
 
 signal hunter_state_changed(hunter_id: int, state_name: String)
 signal hunter_census_changed(patrolling: int, investigating: int, pursuing: int, decoyed: int)
 signal runner_caught()
+signal site_sweep_dispatched(site: Vector3)
+signal site_sweep_scanning(site: Vector3, active: bool)
 
 @export var hunter_scene: PackedScene
 @export var hunter_count: int = 4
@@ -26,13 +29,13 @@ signal runner_caught()
 @export var proximity_override_radius: float = 12.0
 @export var echo_hearing_radius: float = 90.0
 @export var max_investigators_per_echo: int = 2
-@export var capture_radius: float = 1.9
-@export var capture_vertical_tolerance: float = 2.5
 @export var capture_grace_period: float = 3.0
-## A capture only counts against a broadcast at most this old, so a masked or
-## teleported Runner cannot be caught at stale coordinates.
-@export var capture_signal_max_age: float = 0.15
 @export var random_seed: int = 7
+
+@export_group("Site Sweeps")
+@export var first_sweep_delay: float = 12.0
+@export var sweep_interval: float = 28.0
+@export var sweep_scan_duration: float = 9.0
 
 var _hunters: Array[HunterAgent] = []
 var _active_decoys: Array[Node3D] = []
@@ -45,10 +48,14 @@ var _decision_left: float = 0.0
 var _grace_left: float = 0.0
 var _census: Vector4i = Vector4i(-1, -1, -1, -1)
 var _clock: float = 0.0
+var _has_site: bool = false
+var _site: Vector3 = Vector3.ZERO
+var _sweep_timer: float = 0.0
+var _sweeper: HunterAgent
 
 
 func bind_codex(codex: CodexSignalSystem) -> void:
-	codex.ignition_broadcast.connect(_on_ignition_broadcast)
+	codex.ignition_broadcast.connect(report_signal)
 	codex.echo_dropped.connect(_on_echo_dropped)
 	codex.decoy_beacon_activated.connect(_on_decoy_activated)
 	codex.decoy_beacon_deactivated.connect(_on_decoy_deactivated)
@@ -66,13 +73,33 @@ func spawn_hunters(spawn_points: Array[Vector3], patrol_points: Array[Vector3]) 
 		if hunter == null:
 			push_error("HunterAIDirector: hunter_scene root must use hunter_agent.gd.")
 			return
-		hunter.setup(i, patrol_points, random_seed + i * 101)
+		hunter.setup(i, patrol_points.duplicate(), random_seed + i * 101)
 		add_child(hunter)
 		hunter.global_position = spawn_points[i % spawn_points.size()] + Vector3(0.0, 0.2, 0.0)
 		hunter.state_changed.connect(_on_hunter_state_changed)
 		hunter.investigation_finished.connect(_on_investigation_finished)
+		hunter.runner_touched.connect(_on_runner_touched)
+		hunter.sweep_scan_started.connect(_on_sweep_scan_started)
+		hunter.sweep_finished.connect(_on_sweep_finished)
 		_hunters.append(hunter)
 	_emit_census()
+
+
+## Tells the hunters which site they guard. They patrol near it and sweep it periodically.
+func set_guarded_site(site: Vector3, nearby_patrol_points: Array[Vector3]) -> void:
+	_has_site = true
+	_site = site
+	_sweep_timer = first_sweep_delay
+	for hunter: HunterAgent in _hunters:
+		hunter.add_patrol_points(nearby_patrol_points)
+
+
+## Any system may report the Runner's position (Ignition broadcast, security alarm, uplink).
+func report_signal(world_position: Vector3) -> void:
+	if _grace_left > 0.0:
+		return
+	_live_position = world_position
+	_last_live_time = _clock
 
 
 ## Called (via signal wiring in main) after the Runner has been captured and respawned.
@@ -90,7 +117,7 @@ func get_hunters() -> Array[HunterAgent]:
 func _physics_process(delta: float) -> void:
 	_clock += delta
 	_grace_left = maxf(_grace_left - delta, 0.0)
-	_check_capture()
+	_update_sweeps(delta)
 	_decision_left -= delta
 	if _decision_left <= 0.0:
 		_decision_left = decision_interval
@@ -98,21 +125,31 @@ func _physics_process(delta: float) -> void:
 
 
 func _is_live() -> bool:
-	return _grace_left <= 0.0 and _now() - _last_live_time <= live_signal_timeout
+	return _grace_left <= 0.0 and _clock - _last_live_time <= live_signal_timeout
 
 
-func _check_capture() -> void:
-	if _grace_left > 0.0 or _now() - _last_live_time > capture_signal_max_age:
+func _update_sweeps(delta: float) -> void:
+	if not _has_site or _sweeper != null:
 		return
+	_sweep_timer -= delta
+	if _sweep_timer > 0.0:
+		return
+	var best: HunterAgent = null
+	var best_distance: float = INF
 	for hunter: HunterAgent in _hunters:
-		if hunter.state != HunterAgent.State.APEX_PURSUIT:
+		if hunter.state != HunterAgent.State.PATROL or hunter.is_sweeping():
 			continue
-		var offset: Vector3 = hunter.global_position - _live_position
-		if absf(offset.y) <= capture_vertical_tolerance and Vector2(offset.x, offset.z).length() <= capture_radius:
-			_grace_left = capture_grace_period
-			_last_live_time = -1000.0
-			runner_caught.emit()
-			return
+		var distance: float = hunter.global_position.distance_to(_site)
+		if distance < best_distance:
+			best_distance = distance
+			best = hunter
+	if best == null:
+		_sweep_timer = 3.0
+		return
+	if best.command_sweep(_site, sweep_scan_duration):
+		_sweeper = best
+		_sweep_timer = sweep_interval
+		site_sweep_dispatched.emit(_site)
 
 
 func _run_decisions() -> void:
@@ -203,18 +240,7 @@ func _emit_census() -> void:
 		hunter_census_changed.emit(census.x, census.y, census.z, census.w)
 
 
-func _now() -> float:
-	return _clock
-
-
-# --- Codex signal handlers -------------------------------------------------------
-
-func _on_ignition_broadcast(world_position: Vector3) -> void:
-	if _grace_left > 0.0:
-		return
-	_live_position = world_position
-	_last_live_time = _now()
-
+# --- Signal handlers -------------------------------------------------------------
 
 func _on_echo_dropped(echo: ResidualEcho) -> void:
 	if _grace_left > 0.0:
@@ -250,3 +276,21 @@ func _on_investigation_finished(hunter: HunterAgent, echo_id: int) -> void:
 	var searched: Array = _investigated.get(echo_id, [])
 	searched.append(hunter.hunter_id)
 	_investigated[echo_id] = searched
+
+
+func _on_runner_touched(_hunter: HunterAgent) -> void:
+	if _grace_left > 0.0:
+		return
+	_grace_left = capture_grace_period
+	_last_live_time = -1000.0
+	runner_caught.emit()
+
+
+func _on_sweep_scan_started(_hunter: HunterAgent, site: Vector3) -> void:
+	site_sweep_scanning.emit(site, true)
+
+
+func _on_sweep_finished(hunter: HunterAgent) -> void:
+	if hunter == _sweeper:
+		_sweeper = null
+	site_sweep_scanning.emit(_site, false)

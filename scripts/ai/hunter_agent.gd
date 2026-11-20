@@ -5,9 +5,14 @@ extends CharacterBody3D
 ##
 ## Hunters never perceive the Runner directly (Base Form is invisible). They act only on
 ## commands issued by the HunterAIDirector, which itself listens to CodexSignalSystem signals.
+## While patrolling, the Director may order a "site sweep": the hunter walks to the guarded
+## uplink site and scans it. Physical contact while alerted (APEX/INVESTIGATE) is a capture.
 
 signal state_changed(hunter: HunterAgent, new_state: int)
 signal investigation_finished(hunter: HunterAgent, echo_id: int)
+signal sweep_scan_started(hunter: HunterAgent, site: Vector3)
+signal sweep_finished(hunter: HunterAgent)
+signal runner_touched(hunter: HunterAgent)
 
 enum State { PATROL, INVESTIGATE_ECHO, APEX_PURSUIT, CHASE_DECOY }
 
@@ -39,10 +44,16 @@ var _needs_patrol_target: bool = true
 var _rng := RandomNumberGenerator.new()
 var _indicator_material: StandardMaterial3D
 var _time: float = 0.0
+var _sweep_active: bool = false
+var _sweep_scanning: bool = false
+var _sweep_site: Vector3 = Vector3.ZERO
+var _sweep_left: float = 0.0
 
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
 @onready var _indicator: MeshInstance3D = $StateIndicator
 @onready var _state_light: OmniLight3D = $StateLight
+@onready var _rig: HumanoidRig = $Rig
+@onready var _catch_area: Area3D = $CatchArea
 
 
 func _ready() -> void:
@@ -51,6 +62,7 @@ func _ready() -> void:
 	_indicator_material.emission_enabled = true
 	_indicator_material.emission_energy_multiplier = 3.0
 	_indicator.material_override = _indicator_material
+	_catch_area.body_entered.connect(_on_catch_body_entered)
 	_apply_state_visual()
 
 
@@ -133,6 +145,32 @@ func get_decoy_target() -> Node3D:
 	return _decoy_target
 
 
+func add_patrol_points(points: Array[Vector3]) -> void:
+	_patrol_points.append_array(points)
+
+
+## Orders a sweep of the guarded site. Only honoured while patrolling.
+func command_sweep(site: Vector3, duration: float) -> bool:
+	if state != State.PATROL or _sweep_active:
+		return false
+	_sweep_active = true
+	_sweep_scanning = false
+	_sweep_site = site
+	_sweep_left = duration
+	_needs_patrol_target = false
+	var offset := Vector3(_rng.randf_range(-1.0, 1.0), 0.0, _rng.randf_range(-1.0, 1.0)).normalized() * 3.5
+	_set_destination(site + offset)
+	return true
+
+
+func is_sweeping() -> bool:
+	return _sweep_active
+
+
+func is_sweep_scanning() -> bool:
+	return _sweep_scanning
+
+
 # --- Simulation ----------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
@@ -159,12 +197,40 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_update_stuck(delta)
 	_animate_indicator()
+	_animate_rig(delta)
+	_check_contact()
 
 
 func _tick_patrol() -> void:
+	if _sweep_active:
+		_tick_sweep()
+		return
 	if _needs_patrol_target or _agent.is_navigation_finished():
 		_needs_patrol_target = false
 		_pick_patrol_target()
+
+
+func _tick_sweep() -> void:
+	if not _sweep_scanning:
+		if _agent.is_navigation_finished():
+			_sweep_scanning = true
+			sweep_scan_started.emit(self, _sweep_site)
+		return
+	var to_site: Vector3 = _sweep_site - global_position
+	var look_yaw: float = atan2(-to_site.x, -to_site.z) + sin(_time * 1.3) * 0.8
+	rotation.y = lerp_angle(rotation.y, look_yaw, clampf(3.0 * get_physics_process_delta_time(), 0.0, 1.0))
+	_sweep_left -= get_physics_process_delta_time()
+	if _sweep_left <= 0.0:
+		_end_sweep()
+		_needs_patrol_target = true
+
+
+func _end_sweep() -> void:
+	if not _sweep_active:
+		return
+	_sweep_active = false
+	_sweep_scanning = false
+	sweep_finished.emit(self)
 
 
 func _tick_investigate(delta: float) -> void:
@@ -212,7 +278,10 @@ func _update_stuck(delta: float) -> void:
 	if _stuck_time < stuck_timeout:
 		return
 	_stuck_time = 0.0
-	if state == State.PATROL:
+	if state == State.PATROL and _sweep_active and not _sweep_scanning:
+		_sweep_scanning = true
+		sweep_scan_started.emit(self, _sweep_site)
+	elif state == State.PATROL:
 		_pick_patrol_target()
 	elif state == State.INVESTIGATE_ECHO:
 		_linger_left = 0.0
@@ -251,6 +320,8 @@ func _is_navigation_ready() -> bool:
 func _change_state(new_state: State) -> void:
 	if state == new_state:
 		return
+	if state == State.PATROL:
+		_end_sweep()
 	state = new_state
 	_stuck_time = 0.0
 	_apply_state_visual()
@@ -262,9 +333,36 @@ func _apply_state_visual() -> void:
 	_indicator_material.albedo_color = color
 	_indicator_material.emission = color
 	_state_light.light_color = color
+	if _rig != null:
+		_rig.set_accent(color, 4.0 if state == State.APEX_PURSUIT else 2.5)
 
 
 func _animate_indicator() -> void:
 	var spin: float = 6.0 if state == State.APEX_PURSUIT else 1.5
 	_indicator.rotation.y = _time * spin
-	_indicator.position.y = 2.45 + sin(_time * 3.0) * 0.08
+	_indicator.position.y = 2.3 + sin(_time * 3.0) * 0.05
+
+
+func _animate_rig(delta: float) -> void:
+	var local_velocity: Vector3 = global_basis.inverse() * velocity
+	var lingering: bool = state == State.INVESTIGATE_ECHO and _agent.is_navigation_finished()
+	_rig.scanning = _sweep_scanning or lingering
+	_rig.animate(local_velocity, is_on_floor(), delta)
+
+
+func _is_alerted() -> bool:
+	return state == State.APEX_PURSUIT or state == State.INVESTIGATE_ECHO
+
+
+func _check_contact() -> void:
+	if not _is_alerted():
+		return
+	for body: Node3D in _catch_area.get_overlapping_bodies():
+		if body.is_in_group(&"runner"):
+			runner_touched.emit(self)
+			return
+
+
+func _on_catch_body_entered(body: Node3D) -> void:
+	if _is_alerted() and body.is_in_group(&"runner"):
+		runner_touched.emit(self)

@@ -61,6 +61,8 @@ var form: StringName = FORM_BASE
 var is_ignited: bool = false
 ## Node that receives spawned Residual Echoes. Falls back to the current scene.
 var echo_container: Node
+## Multiplier on passive decay set by gameplay (e.g. carrying the Device slows decay).
+var decay_scale: float = 1.0
 
 var _host: Node3D
 var _dead_zone_count: int = 0
@@ -154,6 +156,14 @@ func try_micro_fusion(ability: StringName) -> bool:
 	return true
 
 
+## External Resonance spike (hacking security, handling the Device, ...).
+func add_resonance(amount: float, reason: String = "") -> void:
+	_change_resonance(amount)
+	if reason != "":
+		feedback.emit("%s  +%d Resonance" % [reason, int(amount)])
+	_update_ignition(0.0)
+
+
 func toggle_full_form() -> bool:
 	return set_full_form(form != FORM_FULL)
 
@@ -231,7 +241,7 @@ func emit_full_state() -> void:
 # --- Internals ---------------------------------------------------------------
 
 func _decay_multiplier() -> float:
-	return dead_zone_decay_multiplier if is_in_dead_zone() else 1.0
+	return (dead_zone_decay_multiplier if is_in_dead_zone() else 1.0) * decay_scale
 
 
 func _change_resonance(amount: float) -> void:

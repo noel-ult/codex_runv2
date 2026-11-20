@@ -35,28 +35,17 @@ func _ready() -> void:
 
 
 func _build_visuals() -> void:
-	var volume := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	volume.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	material.albedo_color = Color(0.35, 0.2, 0.8, 0.08)
-	volume.material_override = material
-	volume.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(volume)
-
-	var label := Label3D.new()
-	label.text = "DEAD ZONE\n%s" % zone_name
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.modulate = Color(0.7, 0.55, 1.0)
-	label.outline_size = 8
-	label.font_size = 48
-	label.pixel_size = 0.01
-	label.position = Vector3(0.0, size.y * 0.5 - 0.6, 0.0)
-	add_child(label)
+	# Signal-masking haze (volumetric fog volume tinted violet).
+	var haze := FogVolume.new()
+	haze.size = size
+	haze.shape = RenderingServer.FOG_VOLUME_SHAPE_BOX
+	var fog := FogMaterial.new()
+	fog.density = 0.05
+	fog.albedo = Color(0.55, 0.45, 0.85)
+	fog.emission = Color(0.05, 0.02, 0.1)
+	fog.edge_fade = 0.4
+	haze.material = fog
+	add_child(haze)
 
 
 func _on_body_entered(body: Node3D) -> void:
