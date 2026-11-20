@@ -18,9 +18,11 @@ var _light: SpotLight3D
 var _time: float = 0.0
 var _detect: float = 0.0
 var _runner: Node3D
+var _disabled_left: float = 0.0
 
 
 func _ready() -> void:
+	add_to_group(Electronics.ELECTRONICS_GROUP)
 	var steel := MaterialLibrary.coated(Color(0.2, 0.21, 0.22), 0.85, 0.45)
 	for x: float in [-1.0, 1.0]:
 		for z: float in [-1.0, 1.0]:
@@ -56,9 +58,20 @@ func _ready() -> void:
 	_light.light_volumetric_fog_energy = 3.0
 	_light.shadow_enabled = true
 	_lamp.add_child(_light)
+	Electronics.add_hitbox(_lamp, Vector3.ZERO, Vector3(0.9, 0.9, 0.9))
+
+
+func disable_for(seconds: float) -> void:
+	_disabled_left = maxf(_disabled_left, seconds)
+	_detect = 0.0
 
 
 func _physics_process(delta: float) -> void:
+	if _disabled_left > 0.0:
+		_disabled_left -= delta
+		_light.visible = false
+		return
+	_light.visible = true
 	_time += delta
 	var target: Vector3 = global_position + sweep_center + Vector3(sin(_time * sweep_speed) * sweep_extent.x, 0.0, sin(_time * sweep_speed * 1.7 + 0.6) * sweep_extent.y)
 	_lamp.look_at(target, Vector3.UP)

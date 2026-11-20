@@ -21,9 +21,12 @@ var _detect: float = 0.0
 var _time: float = 0.0
 var _runner: Node3D
 var _phase: float = 0.0
+var _disabled_left: float = 0.0
+var _cone: MeshInstance3D
 
 
 func _ready() -> void:
+	add_to_group(Electronics.ELECTRONICS_GROUP)
 	_phase = randf() * TAU
 	var body := MaterialLibrary.coated(Color(0.85, 0.85, 0.83), 0.3, 0.4)
 	var dark := MaterialLibrary.coated(Color(0.08, 0.08, 0.09), 0.6, 0.4)
@@ -39,7 +42,9 @@ func _ready() -> void:
 	lens.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 
 	_cone_material = MaterialLibrary.hologram(Color(1.0, 0.9, 0.5), 0.05)
+	Electronics.add_hitbox(_head, Vector3(0.0, 0.0, -0.15), Vector3(0.4, 0.35, 0.6))
 	var cone := MeshInstance3D.new()
+	_cone = cone
 	var mesh := CylinderMesh.new()
 	mesh.top_radius = view_range * tan(deg_to_rad(half_fov_degrees))
 	mesh.bottom_radius = 0.02
@@ -63,7 +68,26 @@ func _ready() -> void:
 	_head.add_child(_light)
 
 
+func disable_for(seconds: float) -> void:
+	_disabled_left = maxf(_disabled_left, seconds)
+	_detect = 0.0
+
+
+func is_disabled() -> bool:
+	return _disabled_left > 0.0
+
+
 func _physics_process(delta: float) -> void:
+	if _disabled_left > 0.0:
+		_disabled_left -= delta
+		var flicker: bool = fmod(_disabled_left, 0.8) < 0.08
+		_cone.visible = false
+		_light.visible = false
+		_lens_material.emission_energy_multiplier = 3.0 if flicker else 0.0
+		return
+	_cone.visible = true
+	_light.visible = true
+	_lens_material.emission_energy_multiplier = 3.0
 	_time += delta
 	_head.rotation = Vector3(deg_to_rad(pitch_degrees), deg_to_rad(sweep_degrees) * sin(_time * sweep_speed + _phase), 0.0)
 	if _runner == null or not is_instance_valid(_runner):

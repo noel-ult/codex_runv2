@@ -49,6 +49,7 @@ var _sweep_scanning: bool = false
 var _sweep_site: Vector3 = Vector3.ZERO
 var _sweep_left: float = 0.0
 var _decoy_check_left: float = 0.0
+var _stun_left: float = 0.0
 
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
 @onready var _indicator: MeshInstance3D = $StateIndicator
@@ -64,6 +65,7 @@ func _ready() -> void:
 	_indicator_material.emission_energy_multiplier = 3.0
 	_indicator.material_override = _indicator_material
 	_catch_area.body_entered.connect(_on_catch_body_entered)
+	add_to_group(Electronics.EMP_GROUP)
 	_apply_state_visual()
 
 
@@ -146,6 +148,17 @@ func get_decoy_target() -> Node3D:
 	return _decoy_target
 
 
+## EMP / Jammer dart: the hunter's suit seizes up - it stops, can't catch, loses its target.
+func apply_emp(seconds: float) -> void:
+	_stun_left = maxf(_stun_left, seconds)
+	velocity = Vector3(0.0, velocity.y, 0.0)
+	Electronics.sparks(get_parent(), global_position + Vector3(0.0, 1.6, 0.0), Color(0.5, 0.7, 1.0))
+
+
+func is_stunned() -> bool:
+	return _stun_left > 0.0
+
+
 func add_patrol_points(points: Array[Vector3]) -> void:
 	_patrol_points.append_array(points)
 
@@ -182,6 +195,20 @@ func _physics_process(delta: float) -> void:
 
 	if not _is_navigation_ready():
 		move_and_slide()
+		return
+
+	if _stun_left > 0.0:
+		_stun_left -= delta
+		velocity.x = move_toward(velocity.x, 0.0, 30.0 * delta)
+		velocity.z = move_toward(velocity.z, 0.0, 30.0 * delta)
+		move_and_slide()
+		var flicker: bool = fmod(_stun_left, 0.3) < 0.15
+		_rig.set_accent(Color(0.5, 0.6, 1.0) if flicker else Color(0.05, 0.05, 0.08), 3.0)
+		_rig.crouch_amount = 0.6
+		_rig.animate(Vector3.ZERO, is_on_floor(), delta)
+		if _stun_left <= 0.0:
+			_rig.crouch_amount = 0.0
+			_apply_state_visual()
 		return
 
 	match state:
@@ -353,7 +380,7 @@ func _animate_rig(delta: float) -> void:
 
 
 func _is_alerted() -> bool:
-	return state == State.APEX_PURSUIT or state == State.INVESTIGATE_ECHO
+	return _stun_left <= 0.0 and (state == State.APEX_PURSUIT or state == State.INVESTIGATE_ECHO)
 
 
 func _check_contact() -> void:

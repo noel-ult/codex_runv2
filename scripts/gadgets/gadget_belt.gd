@@ -6,6 +6,8 @@ extends Node
 
 signal inventory_changed(selected: StringName, darts: int, emps: int, cells: int, decoys_active: int)
 signal feedback(message: String)
+## Emitted whenever a gadget is used (disguise systems listen to this).
+signal gadget_used(gadget: StringName)
 
 const GADGET_JAMMER: StringName = &"jammer"
 const GADGET_EMP: StringName = &"emp"
@@ -16,6 +18,11 @@ const GADGET_DECOY: StringName = &"decoy"
 @export var max_darts: int = 8
 @export var max_emps: int = 3
 @export var max_cells: int = 6
+@export var dart_range: float = 40.0
+@export var dart_disable_seconds: float = 20.0
+@export var dart_blind_seconds: float = 4.0
+@export var emp_resonance_spike: float = 15.0
+@export var emp_throw_speed: float = 15.0
 
 var darts: int = 4
 var emps: int = 1
@@ -64,10 +71,17 @@ func handle_input() -> void:
 
 
 func use_selected() -> bool:
+	var used: bool = false
 	match selected:
+		GADGET_JAMMER:
+			used = _fire_dart()
+		GADGET_EMP:
+			used = _throw_emp()
 		GADGET_DECOY:
-			return _deploy_decoy()
-	return false
+			used = _deploy_decoy()
+	if used:
+		gadget_used.emit(selected)
+	return used
 
 
 func collect(kind: StringName, amount: int) -> bool:
@@ -101,6 +115,59 @@ func _select(gadget: StringName) -> void:
 func _cycle(direction: int) -> void:
 	var index: int = _order.find(selected)
 	_select(_order[wrapi(index + direction, 0, _order.size())])
+
+
+## Silent hitscan dart from the crosshair: shuts down one electronic device or scrambles a
+## Hunter's visor (it loses track of you and stops for a few seconds).
+func _fire_dart() -> bool:
+	if darts <= 0:
+		feedback.emit("Out of Jammer darts - find a supply cache.")
+		return false
+	darts -= 1
+	var camera: Camera3D = _player.get_view_camera()
+	var origin: Vector3 = camera.global_position
+	var target: Vector3 = origin - camera.global_basis.z * dart_range
+	var mask: int = GeometryKit.WORLD_LAYER | GeometryKit.DOOR_LAYER | Electronics.HITBOX_LAYER | 4
+	var query := PhysicsRayQueryParameters3D.create(origin, target, mask, [_player.get_rid()])
+	var hit: Dictionary = _player.get_world_3d().direct_space_state.intersect_ray(query)
+	var muzzle: Vector3 = _player.global_position + Vector3(0.0, 1.35, 0.0) + _player.get_facing() * 0.4
+	var end: Vector3 = hit.get("position", target)
+	HunterFX.beam(_player.get_parent(), muzzle, end, Color(0.3, 0.9, 1.0), 0.15)
+	publish()
+	if hit.is_empty():
+		return true
+	var collider: Object = hit.get("collider")
+	var device: Node = Electronics.resolve(collider, Electronics.ELECTRONICS_GROUP)
+	if device != null and device.has_method(&"disable_for"):
+		device.call(&"disable_for", dart_disable_seconds)
+		Electronics.sparks(_player.get_parent(), end, Color(0.4, 0.9, 1.0))
+		feedback.emit("Jammed - offline for %d s." % int(dart_disable_seconds))
+		return true
+	var receiver: Node = Electronics.resolve(collider, Electronics.EMP_GROUP)
+	if receiver != null and receiver.has_method(&"apply_emp"):
+		receiver.call(&"apply_emp", dart_blind_seconds)
+		Electronics.sparks(_player.get_parent(), end, Color(0.4, 0.9, 1.0))
+		feedback.emit("Hunter visor scrambled.")
+	return true
+
+
+## Thrown EMP: area shutdown of electronics + Hunter stun, but the discharge spikes Resonance.
+func _throw_emp() -> bool:
+	if emps <= 0:
+		feedback.emit("No EMP charges left.")
+		return false
+	emps -= 1
+	var camera: Camera3D = _player.get_view_camera()
+	var charge := EmpCharge.new()
+	charge.name = "EmpCharge"
+	_player.get_parent().add_child(charge)
+	charge.global_position = _player.global_position + Vector3(0.0, 1.5, 0.0) + _player.get_facing() * 0.5
+	var aim: Vector3 = -camera.global_basis.z
+	charge.linear_velocity = aim * emp_throw_speed + Vector3(0.0, 3.5, 0.0) + _player.velocity * 0.5
+	charge.detonated.connect(func(_at: Vector3) -> void:
+		_player.get_codex().add_resonance(emp_resonance_spike, "EMP discharge"))
+	publish()
+	return true
 
 
 func _deploy_decoy() -> bool:
