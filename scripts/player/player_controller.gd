@@ -7,12 +7,9 @@ extends CharacterBody3D
 ## notifications arrive through `on_caught()`, wired by the scene's composition root.
 ## Drives the procedural HumanoidRig, camera feel (FOV kick, shake) and hold-to-interact.
 
-signal fracture_target_changed(has_target: bool, target_name: String)
 signal interaction_prompt_changed(text: String, progress: float)
 signal captured(total_captures: int)
 signal feedback(message: String)
-
-const FRACTURE_GROUP: StringName = &"fracture_targets"
 
 @export_group("Movement")
 @export var base_speed: float = 4.5
@@ -37,9 +34,7 @@ const FRACTURE_GROUP: StringName = &"fracture_targets"
 @export var min_pitch_degrees: float = -65.0
 @export var max_pitch_degrees: float = 35.0
 @export var base_fov: float = 70.0
-@export var fracture_range: float = 45.0
-## Half-angle of the aim-assist cone used when the raycast narrowly misses a vehicle.
-@export var fracture_assist_degrees: float = 6.0
+@export var aim_range: float = 45.0
 @export var kill_floor_y: float = -25.0
 
 var captures: int = 0
@@ -53,7 +48,6 @@ var _dash_direction: Vector3 = Vector3.ZERO
 var _super_jump_cooldown_left: float = 0.0
 var _air_super_jump_used: bool = false
 var _last_micro_fusion: StringName = &""
-var _aimed_target: Node3D
 var _interactable: Interactable
 var _hold_time: float = 0.0
 var _prompt_text: String = ""
@@ -76,7 +70,7 @@ func _ready() -> void:
 	_spawn_transform = global_transform
 	_spring_arm.add_excluded_object(get_rid())
 	_interaction_ray.add_exception(self)
-	_interaction_ray.target_position = Vector3(0.0, 0.0, -fracture_range)
+	_interaction_ray.target_position = Vector3(0.0, 0.0, -aim_range)
 	_build_effects()
 	_codex.form_changed.connect(_on_form_changed)
 	_codex.resonance_changed.connect(_on_resonance_changed)
@@ -157,7 +151,6 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 	_face_movement(delta)
-	_update_aim_target()
 	_animate(delta)
 
 	if global_position.y < kill_floor_y:
@@ -258,7 +251,7 @@ func _animate(delta: float) -> void:
 	_aura.emitting = _codex.is_full_form()
 
 
-# --- Interaction & Codex Fracturing ----------------------------------------------
+# --- Interaction ----------------------------------------------
 
 func _handle_interaction(delta: float) -> void:
 	var nearest: Interactable = _find_interactable() if input_enabled else null
@@ -268,7 +261,7 @@ func _handle_interaction(delta: float) -> void:
 
 	if _interactable != null:
 		var can_use: bool = _interactable.meets_requirement(self)
-		if can_use and Input.is_action_pressed(&"fracture_codex"):
+		if can_use and Input.is_action_pressed(&"interact"):
 			_hold_time += delta
 			var progress: float = clampf(_hold_time / maxf(_interactable.hold_time, 0.01), 0.0, 1.0)
 			_interactable.report_progress(progress)
@@ -283,11 +276,6 @@ func _handle_interaction(delta: float) -> void:
 		return
 
 	_set_prompt("", -1.0)
-	if input_enabled and Input.is_action_just_pressed(&"fracture_codex"):
-		if _aimed_target == null:
-			feedback.emit("Look at a moving vehicle to fracture the Codex onto it.")
-			return
-		_codex.fracture_onto(_aimed_target, _last_micro_fusion)
 
 
 func _find_interactable() -> Interactable:
@@ -310,58 +298,6 @@ func _set_prompt(text: String, progress: float) -> void:
 	_prompt_text = text
 	_prompt_progress = progress
 	interaction_prompt_changed.emit(text, progress)
-
-
-func _update_aim_target() -> void:
-	var target: Node3D = _find_aimed_target()
-	if target == _aimed_target:
-		return
-	_aimed_target = target
-	var target_name: String = ""
-	if target != null and target.has_method(&"get_display_name"):
-		target_name = str(target.call(&"get_display_name"))
-	fracture_target_changed.emit(target != null, target_name)
-
-
-func _find_aimed_target() -> Node3D:
-	if _interaction_ray.is_colliding():
-		var hit: Node3D = _resolve_fracture_target(_interaction_ray.get_collider())
-		if hit != null:
-			return hit
-
-	# Aim assist: pick the vehicle closest to the crosshair inside a narrow cone,
-	# provided nothing solid blocks line of sight.
-	var origin: Vector3 = _camera.global_position
-	var forward: Vector3 = -_camera.global_basis.z
-	var best: Node3D = null
-	var best_angle: float = deg_to_rad(fracture_assist_degrees)
-	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
-	for node: Node in get_tree().get_nodes_in_group(FRACTURE_GROUP):
-		var candidate := node as Node3D
-		if candidate == null:
-			continue
-		var to_target: Vector3 = candidate.global_position + Vector3.UP - origin
-		if to_target.length() > fracture_range:
-			continue
-		var angle: float = forward.angle_to(to_target)
-		if angle >= best_angle:
-			continue
-		var query := PhysicsRayQueryParameters3D.create(origin, origin + to_target, _interaction_ray.collision_mask, [get_rid()])
-		var result: Dictionary = space.intersect_ray(query)
-		if not result.is_empty() and _resolve_fracture_target(result.get("collider")) != candidate:
-			continue
-		best = candidate
-		best_angle = angle
-	return best
-
-
-func _resolve_fracture_target(collider: Object) -> Node3D:
-	var node := collider as Node
-	while node != null:
-		if node.is_in_group(FRACTURE_GROUP):
-			return node as Node3D
-		node = node.get_parent()
-	return null
 
 
 # --- Visual feedback -------------------------------------------------------------

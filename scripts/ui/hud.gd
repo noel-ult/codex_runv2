@@ -23,7 +23,6 @@ var _radio_label: Label
 var _census_label: Label
 var _stats_label: Label
 var _crosshair: Label
-var _fracture_prompt: Label
 var _toast: Label
 var _interact_box: VBoxContainer
 var _interact_label: Label
@@ -103,7 +102,6 @@ func bind_codex(codex: CodexSignalSystem) -> void:
 	codex.codex_ignition_ended.connect(_on_codex_ignition_ended)
 	codex.broadcast_suppression_changed.connect(_on_suppression_changed)
 	codex.dead_zone_changed.connect(_on_dead_zone_changed)
-	codex.ability_lock_changed.connect(_on_ability_lock_changed)
 	codex.micro_fusion_triggered.connect(_on_micro_fusion)
 	codex.feedback.connect(show_toast)
 	codex.emit_full_state()
@@ -112,7 +110,6 @@ func bind_codex(codex: CodexSignalSystem) -> void:
 func bind_player(player: PlayerController) -> void:
 	_player = player
 	_camera = player.get_view_camera()
-	player.fracture_target_changed.connect(_on_fracture_target_changed)
 	player.interaction_prompt_changed.connect(_on_interaction_prompt)
 	player.captured.connect(_on_captured)
 	player.feedback.connect(show_toast)
@@ -180,26 +177,11 @@ func _on_dead_zone_changed(inside: bool) -> void:
 	_dead_zone_badge.visible = inside
 
 
-func _on_ability_lock_changed(ability: StringName, locked: bool, holder_name: String) -> void:
-	var label: Label = _ability_labels.get(ability)
-	if label == null:
-		return
-	label.set_meta(&"locked", locked)
-	label.set_meta(&"holder", holder_name)
-	_refresh_ability(ability)
-
-
 func _on_micro_fusion(ability: StringName, _spike: float) -> void:
 	var label: Label = _ability_labels.get(ability)
 	if label != null:
 		label.modulate = Color(2.0, 2.0, 2.0)
 		create_tween().tween_property(label, "modulate", Color.WHITE, 0.4)
-
-
-func _on_fracture_target_changed(has_target: bool, target_name: String) -> void:
-	_fracture_prompt.visible = has_target
-	_fracture_prompt.text = "[E]  Fracture the Codex onto the %s" % target_name
-	_crosshair.add_theme_color_override(&"font_color", Color(1.0, 0.45, 0.95) if has_target else TEXT_COLOR)
 
 
 func _on_interaction_prompt(text: String, progress: float) -> void:
@@ -310,14 +292,9 @@ func _refresh_ability(ability: StringName) -> void:
 	var label: Label = _ability_labels.get(ability)
 	if label == null:
 		return
-	var locked: bool = bool(label.get_meta(&"locked", false))
-	var holder: String = str(label.get_meta(&"holder", ""))
 	var status: String = "ready"
 	var color: Color = CodexSignalSystem.get_ability_color(ability)
-	if locked:
-		status = "FRACTURED → %s" % holder
-		color = Color(0.5, 0.5, 0.56)
-	elif ability == CodexSignalSystem.ABILITY_FULL_FORM and _full_form:
+	if ability == CodexSignalSystem.ABILITY_FULL_FORM and _full_form:
 		status = "ACTIVE"
 	var key: String = {CodexSignalSystem.ABILITY_MICRO_DASH: "Shift", CodexSignalSystem.ABILITY_SUPER_JUMP: "Q", CodexSignalSystem.ABILITY_FULL_FORM: "F"}.get(ability, "")
 	label.text = "%s  [%s]  ·  %s" % [CodexSignalSystem.get_ability_display_name(ability), key, status]
@@ -481,15 +458,6 @@ func _build_center(root: Control) -> void:
 	_crosshair.offset_bottom = 16.0
 	root.add_child(_crosshair)
 
-	_fracture_prompt = _make_label("", 18, Color(1.0, 0.5, 0.95))
-	_fracture_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_fracture_prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	_fracture_prompt.offset_left = -320.0
-	_fracture_prompt.offset_right = 320.0
-	_fracture_prompt.offset_top = 24.0
-	_fracture_prompt.offset_bottom = 52.0
-	_fracture_prompt.visible = false
-	root.add_child(_fracture_prompt)
 
 	_interact_box = VBoxContainer.new()
 	_interact_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -539,7 +507,7 @@ func _build_center(root: Control) -> void:
 
 func _build_help(root: Control) -> void:
 	var help := _make_label(
-		"WASD move · Mouse look · Space jump (again mid-air: Super Jump) · Q Super Jump · Shift Micro Dash · F Full Form\nE hold to interact / tap to fracture onto a vehicle · R restart · Esc release mouse",
+		"WASD move · Mouse look · Space jump (again mid-air: Super Jump) · Q Super Jump · Shift Micro Dash · F Full Form\nE hold to interact · R restart · Esc release mouse",
 		12, DIM_TEXT)
 	help.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	help.offset_left = 20.0

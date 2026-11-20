@@ -9,7 +9,7 @@ extends Node3D
 ## - SW: industrial warehouse (Dead Zone 1) + tower + sheds.
 ## - SE: commercial block with glass office tower and a rooftop bridge.
 ## - East ring road: covered tunnel (Dead Zone 2).
-## - 3 decoy vehicles loop on Path3D routes; parked cars, lamps, trees and street furniture.
+## - 3 traffic vehicles loop on Path3D routes; parked cars, lamps, trees and street furniture.
 ## This node must be a child of a NavigationRegion3D; it bakes the parent after building.
 
 signal city_built()
@@ -24,7 +24,7 @@ const SIDEWALK_HEIGHT: float = 0.1
 @export var random_seed: int = 1337
 
 var dead_zones: Array[DeadZone] = []
-var decoy_vehicles: Array[DecoyVehicle] = []
+var traffic_vehicles: Array[TrafficVehicle] = []
 var uplink_stations: Array[UplinkStation] = []
 var facility: FacilityCompound
 var patrol_points: Array[Vector3] = []
@@ -431,7 +431,7 @@ func _build_uplinks() -> void:
 		uplink_stations.append(station)
 
 
-# --- Decoy vehicles ----------------------------------------------------------------------
+# --- Traffic ----------------------------------------------------------------------
 
 func _build_vehicle_routes() -> void:
 	var inner: float = _ring_inner()
@@ -476,14 +476,14 @@ func _add_route(vehicle_name: String, color: Color, kind: VehicleModel.Kind, spe
 	path.add_child(follow)
 	follow.progress_ratio = start_ratio
 
-	var vehicle := DecoyVehicle.new()
+	var vehicle := TrafficVehicle.new()
 	vehicle.name = vehicle_name
 	vehicle.display_name = vehicle_name
 	vehicle.body_color = color
 	vehicle.kind = kind
 	vehicle.speed = speed
 	follow.add_child(vehicle)
-	decoy_vehicles.append(vehicle)
+	traffic_vehicles.append(vehicle)
 
 
 # --- Navigation ------------------------------------------------------------------------

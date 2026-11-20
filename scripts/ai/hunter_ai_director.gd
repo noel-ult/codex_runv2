@@ -19,6 +19,8 @@ signal hunter_census_changed(patrolling: int, investigating: int, pursuing: int,
 signal runner_caught()
 signal site_sweep_dispatched(site: Vector3)
 signal site_sweep_scanning(site: Vector3, active: bool)
+## A Codex Release was heard; `responders` hunters were dispatched to `world_position`.
+signal release_heard(world_position: Vector3, responders: int)
 
 @export var hunter_scene: PackedScene
 @export var hunter_count: int = 4
@@ -56,6 +58,7 @@ var _sweeper: HunterAgent
 
 func bind_codex(codex: CodexSignalSystem) -> void:
 	codex.ignition_broadcast.connect(report_signal)
+	codex.codex_released.connect(_on_codex_released)
 	codex.echo_dropped.connect(_on_echo_dropped)
 	codex.decoy_beacon_activated.connect(_on_decoy_activated)
 	codex.decoy_beacon_deactivated.connect(_on_decoy_deactivated)
@@ -241,6 +244,21 @@ func _emit_census() -> void:
 
 
 # --- Signal handlers -------------------------------------------------------------
+
+## Every Hunter within the pulse radius converges on the Release point (APEX hunters keep chasing).
+func _on_codex_released(world_position: Vector3, radius: float, _from_decoy: bool) -> void:
+	if _grace_left > 0.0:
+		return
+	var responders: int = 0
+	for hunter: HunterAgent in _hunters:
+		if hunter.state == HunterAgent.State.APEX_PURSUIT:
+			continue
+		if hunter.global_position.distance_to(world_position) <= radius:
+			hunter.command_investigate(world_position, -1)
+			responders += 1
+	release_heard.emit(world_position, responders)
+	_emit_census()
+
 
 func _on_echo_dropped(echo: ResidualEcho) -> void:
 	if _grace_left > 0.0:
