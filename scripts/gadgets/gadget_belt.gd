@@ -50,7 +50,11 @@ static func display_name(gadget: StringName) -> String:
 
 
 func publish() -> void:
-	_decoys = _decoys.filter(func(d: DecoyEmitter) -> bool: return is_instance_valid(d))
+	var live: Array[DecoyEmitter] = []
+	for item: Variant in _decoys:
+		if is_instance_valid(item):
+			live.append(item as DecoyEmitter)
+	_decoys = live
 	inventory_changed.emit(selected, darts, emps, cells, _decoys.size())
 
 

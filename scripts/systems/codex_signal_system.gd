@@ -317,9 +317,10 @@ func _update_release(delta: float) -> void:
 func _strongest_decoy() -> Node3D:
 	var best: Node3D = null
 	var best_charge: float = decoy_release_cost - 0.001
-	for decoy: Node3D in _decoys:
-		if not is_instance_valid(decoy):
+	for item: Variant in _decoys:
+		if not is_instance_valid(item):
 			continue
+		var decoy: Node3D = item as Node3D
 		var charge: float = float(decoy.call(DECOY_CHARGE_METHOD))
 		if charge > best_charge:
 			best_charge = charge
@@ -329,10 +330,16 @@ func _strongest_decoy() -> Node3D:
 
 ## While Ignited, armed decoys echo the broadcast as fake Codex beacons (draining charge).
 func _update_decoy_echo(delta: float) -> void:
-	_decoys = _decoys.filter(func(d: Node3D) -> bool: return is_instance_valid(d))
-	for decoy: Node3D in _echoing.duplicate():
-		if not is_instance_valid(decoy):
-			_echoing.erase(decoy)
+	var live: Array[Node3D] = []
+	for item: Variant in _decoys:
+		if is_instance_valid(item):
+			live.append(item as Node3D)
+	_decoys = live
+	var echoing: Array[Node3D] = []
+	for item: Variant in _echoing:
+		if is_instance_valid(item):
+			echoing.append(item as Node3D)
+	_echoing = echoing
 	for decoy: Node3D in _decoys:
 		var charge: float = float(decoy.call(DECOY_CHARGE_METHOD))
 		var should_echo: bool = is_ignited and charge > 0.0

@@ -15,6 +15,8 @@ signal sweep_finished(hunter: HunterAgent)
 signal runner_touched(hunter: HunterAgent)
 ## A Hunter weapon (sonar) located the Runner.
 signal weapon_report(hunter: HunterAgent, world_position: Vector3)
+## The Runner plugged into this Hunter's suit port (HunterNet access point).
+signal suit_port_accessed(hunter: HunterAgent, actor: Node3D)
 
 enum State { PATROL, INVESTIGATE_ECHO, APEX_PURSUIT, CHASE_DECOY }
 
@@ -61,6 +63,8 @@ var _stun_left: float = 0.0
 var _harpoon_cd: float = 2.0
 var _sonar_cd: float = 4.0
 var _apex_fresh: float = 99.0
+var _diagnostic: bool = false
+var _suit_port: Interactable
 
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
 @onready var _indicator: MeshInstance3D = $StateIndicator
@@ -77,6 +81,16 @@ func _ready() -> void:
 	_indicator.material_override = _indicator_material
 	_catch_area.body_entered.connect(_on_catch_body_entered)
 	add_to_group(Electronics.EMP_GROUP)
+	_suit_port = Interactable.new()
+	_suit_port.name = "SuitPort"
+	_suit_port.prompt = "Jack into the Hunter's suit port (HunterNet)"
+	_suit_port.hold_time = 1.2
+	_suit_port.radius = 1.9
+	_suit_port.position = Vector3(0.0, 1.3, 0.35)
+	_suit_port.requirement = _port_accessible
+	_suit_port.requirement_hint = "Only from behind an unaware (green) Hunter"
+	add_child(_suit_port)
+	_suit_port.completed.connect(func(_i: Interactable, actor: Node3D) -> void: suit_port_accessed.emit(self, actor))
 	_apply_state_visual()
 
 
@@ -172,6 +186,26 @@ func is_stunned() -> bool:
 	return _stun_left > 0.0
 
 
+func _port_accessible(actor: Node3D) -> bool:
+	if state != State.PATROL or _stun_left > 0.0 or _diagnostic:
+		return false
+	var to_actor: Vector3 = actor.global_position - global_position
+	to_actor.y = 0.0
+	return (-global_basis.z).dot(to_actor.normalized()) < -0.3
+
+
+## Suit diagnostics: the Hunter freezes (unaware) while the Runner hacks it.
+func begin_diagnostic(seconds: float) -> void:
+	_diagnostic = true
+	_stun_left = maxf(_stun_left, seconds)
+	velocity = Vector3(0.0, velocity.y, 0.0)
+
+
+func end_diagnostic() -> void:
+	_diagnostic = false
+	_stun_left = minf(_stun_left, 0.8)
+
+
 func add_patrol_points(points: Array[Vector3]) -> void:
 	_patrol_points.append_array(points)
 
@@ -219,10 +253,15 @@ func _physics_process(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, 0.0, 30.0 * delta)
 		move_and_slide()
 		var flicker: bool = fmod(_stun_left, 0.3) < 0.15
-		_rig.set_accent(Color(0.5, 0.6, 1.0) if flicker else Color(0.05, 0.05, 0.08), 3.0)
-		_rig.crouch_amount = 0.6
+		if _diagnostic:
+			_rig.set_accent(Color(0.9, 0.7, 0.2) if fmod(_stun_left, 1.0) < 0.5 else Color(0.2, 0.15, 0.05), 2.0)
+			_rig.crouch_amount = 0.15
+		else:
+			_rig.set_accent(Color(0.5, 0.6, 1.0) if flicker else Color(0.05, 0.05, 0.08), 3.0)
+			_rig.crouch_amount = 0.6
 		_rig.animate(Vector3.ZERO, is_on_floor(), delta)
 		if _stun_left <= 0.0:
+			_diagnostic = false
 			_rig.crouch_amount = 0.0
 			_apply_state_visual()
 		return

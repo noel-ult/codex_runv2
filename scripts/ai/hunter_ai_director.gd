@@ -22,6 +22,8 @@ signal site_sweep_scanning(site: Vector3, active: bool)
 ## A Codex Release was heard; `responders` hunters were dispatched to `world_position`.
 signal release_heard(world_position: Vector3, responders: int)
 signal drone_launched(search_position: Vector3)
+## The Runner jacked into a Hunter's suit; the mission resolves it via `resolve_suit_hack`.
+signal suit_hack_started(hunter_id: int)
 
 @export var hunter_scene: PackedScene
 @export var hunter_count: int = 4
@@ -92,6 +94,7 @@ func spawn_hunters(spawn_points: Array[Vector3], patrol_points: Array[Vector3]) 
 		hunter.sweep_scan_started.connect(_on_sweep_scan_started)
 		hunter.sweep_finished.connect(_on_sweep_finished)
 		hunter.weapon_report.connect(func(_h: HunterAgent, at: Vector3) -> void: report_signal(at))
+		hunter.suit_port_accessed.connect(_on_suit_port_accessed)
 		_hunters.append(hunter)
 	_emit_census()
 
@@ -119,6 +122,37 @@ func on_runner_respawned(_total_captures: int) -> void:
 	_last_live_time = -1000.0
 	for hunter: HunterAgent in _hunters:
 		hunter.command_patrol()
+
+
+## Ends a suit hack: on failure the Hunter wakes up alerted to the Runner's position.
+func resolve_suit_hack(hunter_id: int, success: bool, runner_position: Vector3) -> void:
+	for hunter: HunterAgent in _hunters:
+		if hunter.hunter_id != hunter_id:
+			continue
+		hunter.end_diagnostic()
+		if not success:
+			_grace_left = 0.0
+			report_signal(runner_position)
+		return
+
+
+## HunterNet lockdown after a database breach: every Hunter converges and the guard is doubled.
+func trigger_lockdown(alarm_position: Vector3, guarded_site: Vector3) -> void:
+	report_signal(alarm_position)
+	for hunter: HunterAgent in _hunters:
+		hunter.command_investigate(alarm_position, -1)
+	var ring: Array[Vector3] = []
+	for i: int in 4:
+		ring.append(guarded_site + Vector3(cos(TAU * float(i) / 4.0), 0.0, sin(TAU * float(i) / 4.0)) * 7.0)
+	for hunter: HunterAgent in _hunters:
+		hunter.add_patrol_points(ring)
+	sweep_interval = 14.0
+	_sweep_timer = 6.0
+
+
+func _on_suit_port_accessed(hunter: HunterAgent, _actor: Node3D) -> void:
+	hunter.begin_diagnostic(30.0)
+	suit_hack_started.emit(hunter.hunter_id)
 
 
 func get_hunters() -> Array[HunterAgent]:
@@ -205,7 +239,11 @@ func _run_decisions() -> void:
 
 ## Lost contact: send a Seeker Drone to search the last known position.
 func _launch_drone(from: Vector3, search_at: Vector3) -> void:
-	_drones = _drones.filter(func(d: SeekerDrone) -> bool: return is_instance_valid(d))
+	var live_drones: Array[SeekerDrone] = []
+	for item: Variant in _drones:
+		if is_instance_valid(item):
+			live_drones.append(item as SeekerDrone)
+	_drones = live_drones
 	if _drone_cd > 0.0 or _drones.size() >= max_drones:
 		return
 	_drone_cd = drone_cooldown
@@ -248,8 +286,16 @@ func _investigator_count(echo_id: int) -> int:
 
 
 func _prune() -> void:
-	_active_decoys = _active_decoys.filter(func(beacon: Node3D) -> bool: return is_instance_valid(beacon))
-	_echoes = _echoes.filter(func(echo: ResidualEcho) -> bool: return is_instance_valid(echo) and echo.strength > 0.0)
+	var live_decoys: Array[Node3D] = []
+	for beacon: Variant in _active_decoys:
+		if is_instance_valid(beacon):
+			live_decoys.append(beacon as Node3D)
+	_active_decoys = live_decoys
+	var live_echoes: Array[ResidualEcho] = []
+	for item: Variant in _echoes:
+		if is_instance_valid(item) and (item as ResidualEcho).strength > 0.0:
+			live_echoes.append(item as ResidualEcho)
+	_echoes = live_echoes
 
 
 func _emit_census() -> void:

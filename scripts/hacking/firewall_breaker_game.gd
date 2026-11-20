@@ -52,6 +52,9 @@ func key_pressed(keycode: Key) -> void:
 
 
 func _tick(delta: float) -> void:
+	if _cores_left() == 0:
+		_succeed()
+		return
 	if _field.size.x < size.x - 60.0 and size.x > 0.0:
 		_field.size.x = size.x - 40.0
 	var move: float = 0.0

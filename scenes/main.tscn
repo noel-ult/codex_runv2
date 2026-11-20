@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/world/greybox_city_builder.gd" id="2_city"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://scenes/hunter.tscn" id="5_hunter"]
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="6_hud"]
 [ext_resource type="Script" path="res://scripts/mission/mission_director.gd" id="7_mission"]
+[ext_resource type="Script" path="res://scripts/hacking/hack_terminal.gd" id="8_terminal"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_night"]
 sky_top_color = Color(0.03, 0.04, 0.08, 1)
@@ -94,3 +95,6 @@ script = ExtResource("7_mission")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("6_hud")
+
+[node name="HackTerminal" type="CanvasLayer" parent="."]
+script = ExtResource("8_terminal")

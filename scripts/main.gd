@@ -13,6 +13,7 @@ extends Node3D
 @onready var _director: HunterAIDirector = $HunterAIDirector
 @onready var _mission: MissionDirector = $MissionDirector
 @onready var _hud: HUD = $HUD
+@onready var _terminal: HackTerminal = $HackTerminal
 @onready var _echoes: Node3D = $Echoes
 
 
@@ -35,19 +36,19 @@ func _ready() -> void:
 	_player.captured.connect(_director.on_runner_respawned)
 	_director.spawn_hunters(_city.hunter_spawn_points, _city.patrol_points)
 
-	# Mission: genuine relay is guarded/swept by Hunters; facility CCTV and the uplink
-	# feed positions to the Director.
+	# Mission: the genuine relay is guarded by Hunters; facility security and the uplink feed
+	# positions to the Director; the hacking terminal freezes the Runner while open.
 	var run_seed: int = mission_seed if mission_seed != 0 else int(Time.get_unix_time_from_system())
-	var genuine: UplinkStation = _mission.setup(_player, _city.facility, _city.uplink_stations, run_seed)
+	var genuine: UplinkStation = _mission.setup(_player, _city.facility, _city.uplink_stations, _terminal, _director, run_seed)
 	var front: Vector3 = genuine.global_position + genuine.global_basis.z * 4.5
 	var side: Vector3 = genuine.global_basis.x * 9.0
 	var guard_points: Array[Vector3] = [front + side, front - side, front + genuine.global_basis.z * 4.0]
 	_director.set_guarded_site(front, guard_points)
-	_director.site_sweep_dispatched.connect(_mission.on_site_sweep_dispatched)
-	_director.site_sweep_scanning.connect(_mission.on_site_sweep_scanning)
 	_mission.signal_reported.connect(_director.report_signal)
 	_city.facility.intruder_spotted.connect(_director.report_signal)
 	_player.captured.connect(_mission.on_runner_captured)
+	_terminal.opened_changed.connect(func(open: bool) -> void: _player.input_enabled = not open)
+	_hud.bind_terminal(_terminal)
 	_mission.start()
 
 

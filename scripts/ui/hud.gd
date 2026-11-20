@@ -122,10 +122,13 @@ func bind_director(director: HunterAIDirector) -> void:
 func bind_mission(mission: MissionDirector) -> void:
 	mission.objectives_changed.connect(_on_objectives_changed)
 	mission.marker_changed.connect(_on_marker_changed)
-	mission.observation_progress.connect(_on_observation_progress)
 	mission.transmission_progress.connect(_on_transmission_progress)
 	mission.radio_message.connect(show_radio)
 	mission.mission_completed.connect(_on_mission_completed)
+
+
+func bind_terminal(_terminal: HackTerminal) -> void:
+	pass
 
 
 func show_toast(message: String) -> void:
