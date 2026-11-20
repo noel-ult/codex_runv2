@@ -29,9 +29,9 @@ In the editor, import `project.godot` and press **F5**. The game starts in `res:
 
 ## Play the heist
 
-The opening cutscene shows the Runner's first contact with the Codex. Press **Space** or **Esc** to skip to gameplay.
+The 23-second opening cutscene follows the Runner into Meridian Labs, through first contact with the Codex, and into the aftermath. Press **Space** or **Esc** to skip to gameplay.
 
-**Judging shortcut:** Press **Ctrl + Shift + F10** while on foot during gameplay to jump to the live relay, watch a six-second upload, and see the transmission finale. The ending screen labels it as a judging demo. Press **R** to start a fresh run and clear any credential checkpoint.
+**Judging shortcut:** Press **Ctrl + Shift + F10** while on foot during gameplay to jump to the live relay, watch a six-second upload, and see the transmission finale. Press **R** to start a fresh run and clear any credential checkpoint.
 
 ### Main mission
 

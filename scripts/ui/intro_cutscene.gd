@@ -1,26 +1,35 @@
 class_name IntroCutscene
 extends CanvasLayer
-## Three camera shots in an isolated world, with the mission scene paused underneath.
+## Four camera shots in an isolated world, with the mission scene paused underneath.
 
 signal finished()
 
-const SHOT_SECONDS: float = 4.0
-const DURATION: float = SHOT_SECONDS * 3.0
+const SHOT_SECONDS: float = 5.75
+const DURATION: float = SHOT_SECONDS * 4.0
 const CAPTIONS: PackedStringArray = [
-	"I found the Codex sealed beneath Meridian Labs.",
-	"The moment I touched it, I felt a pulse under my skin.",
-	"Now every burst makes me stronger. Every pulse tells the Hunters where I am.",
+	"I slipped into Meridian Labs looking for proof of what the Hunters were building.",
+	"Behind a sealed door, I found the Codex. It started pulsing before I even touched it.",
+	"One touch. The pulse went through my hand and lit up my nerves.",
+	"I could feel the power building. So could the Hunters.",
 ]
 const CYAN: Color = Color("69e8de")
+const AMBER: Color = Color("ff9b66")
+const CORE_POSITION: Vector3 = Vector3(0.2, 1.24, 0.0)
+const CONTACT_POSITION: Vector3 = Vector3(-0.39, 0.0, 0.19)
 
 var _screen: SubViewportContainer
 var _view: SubViewport
 var _camera: Camera3D
 var _runner: HumanoidRig
+var _runner_root: Node3D
+var _skeleton: Skeleton3D
 var _artifact: Node3D
 var _pulse: OmniLight3D
+var _alarm: OmniLight3D
+var _alarm_strips: StandardMaterial3D
 var _rings: Array[MeshInstance3D] = []
 var _caption: Label
+var _location: Label
 var _fade: ColorRect
 var _elapsed: float = 0.0
 var _shot: int = -1
@@ -70,43 +79,82 @@ func _update_shot(elapsed: float, delta: float) -> void:
 	if shot != _shot:
 		_shot = shot
 		_caption.text = CAPTIONS[shot]
-	var target: Vector3
+		if shot == 3:
+			_location.text = "MERIDIAN LABS   /   CONTAINMENT BREACH"
+			_location.add_theme_color_override(&"font_color", AMBER)
+	var target: Vector3 = CORE_POSITION
+	var runner_position: Vector3 = CONTACT_POSITION
+	var stride: float = 0.0
+	var reach: float = 0.0
+	var recoil: float = 0.0
 	var pulse: float = 0.0
+	var ring_origin: Vector3 = CORE_POSITION
+	var artifact_energy: float = 0.0
 	match shot:
 		0:
-			_camera.position = Vector3(3.6, 2.2, -5.6).lerp(Vector3(2.4, 1.75, -3.7), t)
-			target = Vector3(0.0, 0.96, 0.0)
-			_runner.position.x = lerpf(-2.2, -0.54, t)
+			_camera.position = Vector3(0.8, 2.65, -6.8).lerp(Vector3(1.1, 2.12, -4.1), t)
+			target = Vector3(-0.95, 1.0, 0.1)
+			var approach: float = smoothstep(0.3, 5.2, age)
+			runner_position.x = lerpf(-2.9, -0.82, approach)
+			stride = 0.64 * smoothstep(0.0, 1.0, age) * (1.0 - smoothstep(3.8, 5.2, age))
 		1:
-			_camera.position = Vector3(0.12, 1.68, -2.5).lerp(Vector3(0.03, 1.52, -2.0), t)
-			target = Vector3(0.0, 1.25, 0.0)
-			pulse = smoothstep(1.05, 2.0, age) * (1.0 - smoothstep(2.65, 4.0, age))
-			_runner.position.x = -0.54
+			_camera.position = Vector3(-1.2, 1.71, -1.65).lerp(Vector3(-0.55, 1.47, -1.42), t)
+			target = CORE_POSITION + Vector3(-0.16, 0.04, 0.0)
+			var step: float = smoothstep(2.2, 4.3, age)
+			runner_position.x = lerpf(-0.82, CONTACT_POSITION.x, step)
+			stride = 0.4 * smoothstep(2.2, 2.8, age) * (1.0 - smoothstep(3.8, 4.3, age))
+			reach = smoothstep(4.0, 5.65, age) * 0.35
+			artifact_energy = 0.35 + 0.2 * sin(age * 3.4)
+		2:
+			_camera.position = Vector3(-0.22, 1.57, -1.81).lerp(Vector3(-0.36, 1.59, -2.36), t)
+			target = Vector3(-0.21, 1.29, 0.13)
+			reach = lerpf(0.35, 1.0, smoothstep(0.1, 2.05, age)) * (1.0 - smoothstep(2.35, 3.35, age))
+			recoil = smoothstep(2.2, 2.65, age) * (1.0 - smoothstep(3.25, 5.6, age))
+			runner_position.x -= 0.5 * smoothstep(2.23, 3.55, age)
+			pulse = smoothstep(2.05, 2.42, age) * (1.0 - 0.68 * smoothstep(2.65, 5.6, age))
+			artifact_energy = 0.28 + pulse * 1.6
 		_:
-			_camera.position = Vector3(-2.05, 1.35, -2.3).lerp(Vector3(-1.4, 1.72, -3.05), t)
-			target = Vector3(-0.7, 0.98, 0.0)
-			pulse = 0.6 + 0.25 * sin(age * 5.5)
-			_runner.position.x = -0.92
+			runner_position.x = -0.89
+			_camera.position = Vector3(-1.86, 1.44, -2.07).lerp(Vector3(-1.42, 1.60, -2.6), t)
+			target = runner_position + Vector3(0.02, 1.06, 0.0)
+			pulse = 0.45 + 0.3 * sin(age * 2.8)
+			ring_origin = runner_position + Vector3(0.0, 0.34, 0.0)
 	_camera.look_at(target)
-	_artifact.rotation.y = elapsed * (0.65 + pulse * 0.4)
-	_artifact.position.y = 1.15 + 0.08 * sin(elapsed * 2.0)
-	_pulse.light_energy = 1.6 + pulse * 5.0
-	_runner.rotation.y = PI * 0.5 if shot < 2 else lerpf(-0.55, 0.14, t)
-	_runner.scanning = shot == 1 and age > 0.3 and age < 2.35
-	_runner.crouch_amount = pulse * 0.65 if shot == 1 else 0.0
-	_runner.set_accent(CYAN, 0.1 + pulse * 3.5)
-	_runner.animate(Vector3(0.0, 0.0, -1.0 + t) if shot == 0 else Vector3.ZERO, true, delta)
+	_runner_root.position = runner_position
+	_runner_root.rotation.y = -PI * 0.5 if shot < 3 else lerpf(-PI * 0.5, -0.12, smoothstep(0.1, 4.0, age))
+	_runner.crouch_amount = recoil * 0.85
+	_runner.set_accent(CYAN, 0.12 + pulse * 3.6)
+	_runner.animate(Vector3(0.0, 0.0, -stride), true, delta)
+	if reach > 0.0:
+		_pose_reach(reach)
+	_artifact.rotation.y = elapsed * 0.65
+	_artifact.position.y = CORE_POSITION.y + 0.055 * sin(elapsed * 2.0)
+	_pulse.light_energy = 1.3 + artifact_energy * 3.5 + pulse * 2.0
+	_pulse.position = CORE_POSITION + Vector3(0.0, 0.0, -0.15) if shot < 3 else runner_position + Vector3(0.0, 1.10, -0.55)
+	var alarm: float = (0.55 + 0.45 * sin(age * 3.1)) * smoothstep(0.0, 0.5, age) if shot == 3 else 0.0
+	_alarm.light_energy = alarm * 5.0
+	_alarm_strips.emission_energy_multiplier = alarm * 3.0
 	for index: int in _rings.size():
-		var phase: float = fmod(age * 0.8 + float(index) / _rings.size(), 1.0)
+		var phase: float = fmod(age * 0.63 + float(index) / _rings.size(), 1.0)
 		var ring: MeshInstance3D = _rings[index]
-		ring.visible = pulse > 0.15
-		ring.scale = Vector3.ONE * lerpf(0.25, 2.9, phase)
-		ring.transparency = lerpf(0.3, 1.0, phase)
-	_fade.color.a = maxf(1.0 - smoothstep(0.0, 0.36, age), smoothstep(3.63, 4.0, age))
-	if shot == 1:
-		_fade.color = Color(0.47, 0.96, 1.0, maxf(0.0, 0.34 - absf(age - 2.1) * 1.2)) if age > 1.8 and age < 2.4 else Color(0.0, 0.0, 0.0, _fade.color.a)
-	else:
-		_fade.color = Color(0.0, 0.0, 0.0, _fade.color.a)
+		ring.position = ring_origin + Vector3.UP * float(index) * 0.06
+		ring.scale = Vector3.ONE * lerpf(0.25, 3.55, phase)
+		ring.transparency = 1.0 - (1.0 - phase) * pulse
+	var fade_alpha: float = maxf(1.0 - smoothstep(0.0, 0.4, age), smoothstep(SHOT_SECONDS - 0.45, SHOT_SECONDS, age))
+	var flash: float = 0.3 * (1.0 - smoothstep(0.0, 0.42, absf(age - 2.37))) if shot == 2 else 0.0
+	_fade.color = Color(0.47, 0.96, 1.0, flash) if flash > 0.0 else Color(0.0, 0.0, 0.0, fade_alpha)
+
+
+func _pose_reach(weight: float) -> void:
+	var shoulder: int = HumanoidRig.B_SHOULDER_L
+	var elbow: int = HumanoidRig.B_ELBOW_L
+	var head: int = HumanoidRig.B_HEAD
+	_skeleton.set_bone_pose_rotation(shoulder, _skeleton.get_bone_pose_rotation(shoulder).slerp(
+		Quaternion.from_euler(Vector3(1.04, 0.0, 0.0)), weight))
+	_skeleton.set_bone_pose_rotation(elbow, _skeleton.get_bone_pose_rotation(elbow).slerp(
+		Quaternion.from_euler(Vector3(0.23, 0.0, 0.0)), weight))
+	_skeleton.set_bone_pose_rotation(head, _skeleton.get_bone_pose_rotation(head).slerp(
+		Quaternion.from_euler(Vector3(-0.2, 0.0, 0.0)), weight))
 
 
 func _build() -> void:
@@ -135,12 +183,19 @@ func _build() -> void:
 	var concrete: StandardMaterial3D = MaterialLibrary.coated(Color("18232e"), 0.72, 0.26)
 	var metal: StandardMaterial3D = MaterialLibrary.coated(Color("34434b"), 0.54, 0.55)
 	var glass: StandardMaterial3D = MaterialLibrary.emissive(CYAN, 2.4, false)
+	_alarm_strips = MaterialLibrary.emissive(AMBER.darkened(0.38), 0.0, false)
 	GeometryKit.mesh_box(stage, Vector3(0.0, -0.16, 0.0), Vector3(14.0, 0.3, 14.0), concrete)
 	GeometryKit.mesh_box(stage, Vector3(0.0, 2.0, 3.7), Vector3(14.0, 4.0, 0.3), concrete)
 	for index: int in range(-4, 5):
 		var x: float = float(index) * 1.45
 		GeometryKit.mesh_box(stage, Vector3(x, 1.62, 3.45), Vector3(0.13, 3.25, 0.38), metal)
 		GeometryKit.mesh_box(stage, Vector3(x, 2.61, 3.22), Vector3(0.045, 0.45, 0.024), glass, false)
+	GeometryKit.mesh_box(stage, Vector3(0.0, 3.34, 3.0), Vector3(10.0, 0.09, 0.04), _alarm_strips, false)
+	GeometryKit.mesh_box(stage, Vector3(-3.3, 1.13, 2.74), Vector3(2.4, 2.28, 0.32), metal)
+	GeometryKit.mesh_box(stage, Vector3(-3.3, 1.13, 2.55), Vector3(2.12, 2.08, 0.04), concrete)
+	GeometryKit.mesh_box(stage, Vector3(-3.3, 1.13, 2.50), Vector3(0.018, 2.08, 0.04), glass, false)
+	for side: float in [-1.0, 1.0]:
+		GeometryKit.mesh_box(stage, Vector3(0.2 + side * 1.22, 0.0, 0.0), Vector3(0.025, 0.019, 4.4), metal)
 	GeometryKit.cylinder(stage, Vector3(0.2, 0.42, 0.0), 0.32, 0.43, 0.84, metal, 32)
 	GeometryKit.cylinder(stage, Vector3(0.2, 0.81, 0.0), 0.34, 0.34, 0.025, glass, 32)
 	_artifact = Node3D.new()
@@ -153,6 +208,7 @@ func _build() -> void:
 		_artifact, Vector3(0.0, -0.18, 0.0), Vector3(0.31, 0.05, 0.31), metal)
 	cage.rotation.y = PI * 0.25
 	_pulse = _add_light(stage, Vector3(0.25, 1.25, -0.4), CYAN, 2.1, 4.2)
+	_alarm = _add_light(stage, Vector3(0.0, 2.8, 1.8), AMBER, 0.0, 8.0)
 	_add_light(stage, Vector3(-2.4, 2.1, -2.0), Color("e6b28a"), 2.5, 7.0)
 	_add_light(stage, Vector3(-0.8, 2.6, 1.8), Color("639ee8"), 3.8, 7.0)
 	for index: int in 3:
@@ -162,14 +218,15 @@ func _build() -> void:
 		torus.outer_radius = 0.45
 		ring.mesh = torus
 		ring.material_override = glass
-		ring.position = Vector3(0.2, 0.06 + float(index) * 0.055, 0.0)
 		stage.add_child(ring)
 		_rings.append(ring)
 
+	_runner_root = Node3D.new()
+	stage.add_child(_runner_root)
 	_runner = HumanoidRig.new()
 	_runner.style = HumanoidRig.Style.RUNNER
-	stage.add_child(_runner)
-	_runner.set_carry_visible(false)
+	_runner_root.add_child(_runner)
+	_skeleton = _runner.get_node("Skeleton3D") as Skeleton3D
 	_camera = Camera3D.new()
 	_camera.fov = 48.0
 	stage.add_child(_camera)
@@ -196,8 +253,12 @@ func _build_overlay() -> void:
 	top.color = Color("06090e")
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	top.offset_bottom = 36.0
+	top.offset_bottom = 43.0
 	bars.add_child(top)
+	_location = _make_label(top, 13, CYAN)
+	_location.text = "MERIDIAN LABS   /   CONTAINMENT LEVEL"
+	_location.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_location.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	var bottom := ColorRect.new()
 	bottom.color = top.color
 	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE

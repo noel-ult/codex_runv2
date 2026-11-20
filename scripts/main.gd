@@ -47,7 +47,7 @@ func _ready() -> void:
 	_hud.bind_mission(_mission)
 	_mission.mission_completed.connect(func(_elapsed: float, _captures: int) -> void:
 		if _mission.demo_upload:
-			_hud.show_demo_ending_label())
+			_hud.show_ending_restart_prompt())
 	_pause.can_pause = func() -> bool: return not _terminal.is_open and not _prep.is_open and not _shop.is_open and not _rest_in_progress
 	_pause.restart_requested.connect(_restart_run)
 	_pause.graphics_preset_changed.connect(_save_graphics_preset)

@@ -422,7 +422,7 @@ func _begin_transmission() -> void:
 	_genuine.set_transmission(0.0)
 	_refresh_spoof_relay()
 	if demo_upload:
-		radio_message.emit("JUDGING DEMO · Final upload in progress.")
+		radio_message.emit("Final upload in progress.")
 		_publish()
 		return
 	radio_message.emit("Uplink open! Hold within %d m of the relay for %d s - it broadcasts your position." % [int(transmit_radius), int(transmit_duration)])

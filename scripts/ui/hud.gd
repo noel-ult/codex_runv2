@@ -433,8 +433,8 @@ func _on_transmission_progress(progress: float, in_range: bool) -> void:
 	_meter_fill.bg_color = GREEN if in_range else RED
 
 
-func show_demo_ending_label() -> void:
-	_win_stats.text = "JUDGING DEMO\n\nR  ·  run it again"
+func show_ending_restart_prompt() -> void:
+	_win_stats.text = "R  ·  run it again"
 
 
 func _on_mission_completed(elapsed_seconds: float, captures: int) -> void:
