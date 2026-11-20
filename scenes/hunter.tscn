@@ -1,0 +1,67 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/ai/hunter_agent.gd" id="1_hunter"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_hunter"]
+radius = 0.45
+height = 1.9
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_hunter"]
+radius = 0.45
+height = 1.9
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hunter"]
+albedo_color = Color(0.12, 0.1, 0.12, 1)
+metallic = 0.6
+roughness = 0.35
+
+[sub_resource type="BoxMesh" id="BoxMesh_hunter_visor"]
+size = Vector3(0.6, 0.14, 0.22)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hunter_visor"]
+shading_mode = 0
+albedo_color = Color(1, 0.2, 0.15, 1)
+emission_enabled = true
+emission = Color(1, 0.15, 0.1, 1)
+emission_energy_multiplier = 4.0
+
+[sub_resource type="TorusMesh" id="TorusMesh_indicator"]
+inner_radius = 0.28
+outer_radius = 0.42
+
+[node name="Hunter" type="CharacterBody3D" groups=["hunters"]]
+collision_layer = 4
+collision_mask = 1
+floor_snap_length = 0.3
+script = ExtResource("1_hunter")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
+shape = SubResource("CapsuleShape3D_hunter")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
+mesh = SubResource("CapsuleMesh_hunter")
+surface_material_override/0 = SubResource("StandardMaterial3D_hunter")
+
+[node name="Visor" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.55, -0.38)
+mesh = SubResource("BoxMesh_hunter_visor")
+surface_material_override/0 = SubResource("StandardMaterial3D_hunter_visor")
+
+[node name="StateIndicator" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.45, 0)
+cast_shadow = 0
+mesh = SubResource("TorusMesh_indicator")
+
+[node name="StateLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.45, 0)
+light_energy = 1.5
+omni_range = 5.0
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="."]
+path_desired_distance = 0.75
+target_desired_distance = 1.2
+path_max_distance = 3.0
+height = 1.9
+radius = 0.5

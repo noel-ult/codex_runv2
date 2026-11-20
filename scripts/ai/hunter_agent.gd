@@ -1,0 +1,270 @@
+class_name HunterAgent
+extends CharacterBody3D
+## Individual Hunter with a 4-state FSM:
+## PATROL -> INVESTIGATE_ECHO -> APEX_PURSUIT -> CHASE_DECOY.
+##
+## Hunters never perceive the Runner directly (Base Form is invisible). They act only on
+## commands issued by the HunterAIDirector, which itself listens to CodexSignalSystem signals.
+
+signal state_changed(hunter: HunterAgent, new_state: int)
+signal investigation_finished(hunter: HunterAgent, echo_id: int)
+
+enum State { PATROL, INVESTIGATE_ECHO, APEX_PURSUIT, CHASE_DECOY }
+
+@export_group("Speeds")
+@export var patrol_speed: float = 4.0
+@export var investigate_speed: float = 6.0
+@export var pursuit_speed: float = 8.0
+@export var decoy_chase_speed: float = 9.0
+@export var acceleration: float = 20.0
+@export var turn_speed: float = 8.0
+@export var gravity: float = 22.0
+
+@export_group("Behaviour")
+@export var investigate_linger_time: float = 3.0
+@export var moving_target_repath_interval: float = 0.25
+@export var stuck_timeout: float = 2.5
+
+var hunter_id: int = 0
+var state: State = State.PATROL
+var current_echo_id: int = -1
+var last_known_position: Vector3 = Vector3.ZERO
+
+var _patrol_points: Array[Vector3] = []
+var _decoy_target: Node3D
+var _linger_left: float = 0.0
+var _repath_left: float = 0.0
+var _stuck_time: float = 0.0
+var _needs_patrol_target: bool = true
+var _rng := RandomNumberGenerator.new()
+var _indicator_material: StandardMaterial3D
+var _time: float = 0.0
+
+@onready var _agent: NavigationAgent3D = $NavigationAgent3D
+@onready var _indicator: MeshInstance3D = $StateIndicator
+@onready var _state_light: OmniLight3D = $StateLight
+
+
+func _ready() -> void:
+	_indicator_material = StandardMaterial3D.new()
+	_indicator_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_indicator_material.emission_enabled = true
+	_indicator_material.emission_energy_multiplier = 3.0
+	_indicator.material_override = _indicator_material
+	_apply_state_visual()
+
+
+func setup(id: int, patrol_points: Array[Vector3], random_seed: int) -> void:
+	hunter_id = id
+	name = "Hunter%d" % id
+	_patrol_points = patrol_points
+	_rng.seed = random_seed
+
+
+static func state_to_name(value: int) -> String:
+	match value:
+		State.PATROL:
+			return "PATROL"
+		State.INVESTIGATE_ECHO:
+			return "INVESTIGATE_ECHO"
+		State.APEX_PURSUIT:
+			return "APEX_PURSUIT"
+		State.CHASE_DECOY:
+			return "CHASE_DECOY"
+	return "UNKNOWN"
+
+
+static func state_to_color(value: int) -> Color:
+	match value:
+		State.PATROL:
+			return Color(0.2, 0.95, 0.4)
+		State.INVESTIGATE_ECHO:
+			return Color(1.0, 0.75, 0.1)
+		State.APEX_PURSUIT:
+			return Color(1.0, 0.1, 0.1)
+		State.CHASE_DECOY:
+			return Color(0.7, 0.3, 1.0)
+	return Color.WHITE
+
+
+# --- Commands issued by the Director -----------------------------------------
+
+func command_patrol() -> void:
+	if state == State.PATROL:
+		return
+	current_echo_id = -1
+	_decoy_target = null
+	_change_state(State.PATROL)
+	_needs_patrol_target = true
+
+
+func command_investigate(target: Vector3, echo_id: int) -> void:
+	if state == State.INVESTIGATE_ECHO and echo_id == current_echo_id and echo_id != -1:
+		return
+	current_echo_id = echo_id
+	_decoy_target = null
+	_change_state(State.INVESTIGATE_ECHO)
+	_linger_left = investigate_linger_time
+	_set_destination(target)
+
+
+func command_apex_pursuit(target: Vector3) -> void:
+	last_known_position = target
+	current_echo_id = -1
+	_decoy_target = null
+	if state != State.APEX_PURSUIT:
+		_change_state(State.APEX_PURSUIT)
+		_repath_left = 0.0
+	if _repath_left <= 0.0:
+		_repath_left = moving_target_repath_interval
+		_set_destination(target)
+
+
+func command_chase_decoy(beacon: Node3D) -> void:
+	if state == State.CHASE_DECOY and beacon == _decoy_target:
+		return
+	current_echo_id = -1
+	_decoy_target = beacon
+	_change_state(State.CHASE_DECOY)
+	_repath_left = 0.0
+
+
+func get_decoy_target() -> Node3D:
+	return _decoy_target
+
+
+# --- Simulation ----------------------------------------------------------------
+
+func _physics_process(delta: float) -> void:
+	_time += delta
+	_repath_left -= delta
+	if not is_on_floor():
+		velocity.y -= gravity * delta
+
+	if not _is_navigation_ready():
+		move_and_slide()
+		return
+
+	match state:
+		State.PATROL:
+			_tick_patrol()
+		State.INVESTIGATE_ECHO:
+			_tick_investigate(delta)
+		State.APEX_PURSUIT:
+			pass
+		State.CHASE_DECOY:
+			_tick_chase_decoy()
+
+	_follow_path(delta)
+	move_and_slide()
+	_update_stuck(delta)
+	_animate_indicator()
+
+
+func _tick_patrol() -> void:
+	if _needs_patrol_target or _agent.is_navigation_finished():
+		_needs_patrol_target = false
+		_pick_patrol_target()
+
+
+func _tick_investigate(delta: float) -> void:
+	if not _agent.is_navigation_finished():
+		return
+	_linger_left -= delta
+	rotation.y += sin(_time * 2.0) * 2.0 * delta
+	if _linger_left <= 0.0:
+		var finished_id: int = current_echo_id
+		command_patrol()
+		investigation_finished.emit(self, finished_id)
+
+
+func _tick_chase_decoy() -> void:
+	if _decoy_target == null or not is_instance_valid(_decoy_target):
+		command_patrol()
+		return
+	if _repath_left <= 0.0:
+		_repath_left = moving_target_repath_interval
+		_set_destination(_decoy_target.global_position)
+
+
+func _follow_path(delta: float) -> void:
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	var desired := Vector3.ZERO
+	if not _agent.is_navigation_finished():
+		var next_point: Vector3 = _agent.get_next_path_position()
+		var to_next: Vector3 = next_point - global_position
+		to_next.y = 0.0
+		if to_next.length_squared() > 0.0001:
+			desired = to_next.normalized() * _speed_for_state()
+			var target_yaw: float = atan2(-to_next.x, -to_next.z)
+			rotation.y = lerp_angle(rotation.y, target_yaw, clampf(turn_speed * delta, 0.0, 1.0))
+	horizontal = horizontal.move_toward(desired, acceleration * delta)
+	velocity.x = horizontal.x
+	velocity.z = horizontal.z
+
+
+func _update_stuck(delta: float) -> void:
+	var moving: bool = Vector2(velocity.x, velocity.z).length() > 0.3
+	if moving or _agent.is_navigation_finished():
+		_stuck_time = 0.0
+		return
+	_stuck_time += delta
+	if _stuck_time < stuck_timeout:
+		return
+	_stuck_time = 0.0
+	if state == State.PATROL:
+		_pick_patrol_target()
+	elif state == State.INVESTIGATE_ECHO:
+		_linger_left = 0.0
+		_agent.target_position = global_position
+
+
+func _speed_for_state() -> float:
+	match state:
+		State.INVESTIGATE_ECHO:
+			return investigate_speed
+		State.APEX_PURSUIT:
+			return pursuit_speed
+		State.CHASE_DECOY:
+			return decoy_chase_speed
+	return patrol_speed
+
+
+func _pick_patrol_target() -> void:
+	if _patrol_points.is_empty():
+		return
+	var point: Vector3 = _patrol_points[_rng.randi_range(0, _patrol_points.size() - 1)]
+	if point.distance_to(global_position) < 6.0 and _patrol_points.size() > 1:
+		point = _patrol_points[(_patrol_points.find(point) + 1) % _patrol_points.size()]
+	_set_destination(point)
+
+
+func _set_destination(target: Vector3) -> void:
+	var map: RID = _agent.get_navigation_map()
+	_agent.target_position = NavigationServer3D.map_get_closest_point(map, target)
+
+
+func _is_navigation_ready() -> bool:
+	return NavigationServer3D.map_get_iteration_id(_agent.get_navigation_map()) > 0
+
+
+func _change_state(new_state: State) -> void:
+	if state == new_state:
+		return
+	state = new_state
+	_stuck_time = 0.0
+	_apply_state_visual()
+	state_changed.emit(self, state)
+
+
+func _apply_state_visual() -> void:
+	var color: Color = state_to_color(state)
+	_indicator_material.albedo_color = color
+	_indicator_material.emission = color
+	_state_light.light_color = color
+
+
+func _animate_indicator() -> void:
+	var spin: float = 6.0 if state == State.APEX_PURSUIT else 1.5
+	_indicator.rotation.y = _time * spin
+	_indicator.position.y = 2.45 + sin(_time * 3.0) * 0.08
