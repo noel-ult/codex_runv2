@@ -38,7 +38,7 @@ The opening cinematic runs for 23 seconds in four shots. It follows the Runner i
 2. Carry the packet to Storage 07 on the west edge. Follow the decoder marker and hold E at the HunterNet decoder inside the safehouse. Win Signal Lock to recover lab credentials and automatically save the credential checkpoint. Escape cancels decoding and retains the packet for another attempt.
 3. Infiltrate Meridian Signal Labs in the northeast block and authenticate at the HunterNet core door. A technician disguise opens staff entrances, and the other infiltration routes remain available.
 4. Breach the database through Signal Lock, Firewall Override, and Cipher Recovery. Firewall Override shows three number prompts to answer with keys 1–3. Wrong answers raise trace. Trace can abort the breach and temporarily lock the terminal. Success reveals the live relay and starts lockdown.
-5. Activate the live relay and stay within 16 meters for 50 seconds of accumulated transmission time. Leaving the radius pauses progress.
+5. Activate the live relay and stay within 16 meters for 50 seconds of accumulated transmission time. Leaving the radius pauses progress. Once the uplink completes, the completion splash leads into a short animated credits sequence. Space or Escape skips the credits and returns to the finale.
 
 Cipher Recovery gives a clue on each submitted tile. Green marks an exact match, amber marks a glyph that belongs in another slot, and dim marks an unmatched tile. The secret uses distinct glyphs, and repeated guesses of the same glyph can match it only once per row. Exact matches take priority.
 
@@ -46,7 +46,7 @@ After the database breach, an optional violet marker identifies a dormant relay.
 
 Capture restores the latest saved objective and clears the active hack and any unfinished upload. Gear, credits, and prep upgrades stay with the Runner during capture. After decoding, the Runner respawns at Storage 07.
 
-For a presentation, press Ctrl+Shift+F10 while on foot during gameplay. The shortcut moves the Runner to the live relay, runs a six-second upload with the standard beam and progress display, then shows the ending. The preview leaves the checkpoint intact.
+For a presentation, press Ctrl+Shift+F10 while on foot during gameplay. The shortcut moves the Runner to the live relay and runs a six-second upload with the standard beam and progress display. It then shows the completion splash and animated credits. The preview leaves the checkpoint intact.
 
 Credential decode auto-saves. Ctrl+S saves the packet, core access, breach or completed transmission milestone. Relaunch restores objective state with starting inventory and credits, plus the decode salvage reward if earned. Restart Run clears the checkpoint.
 
@@ -82,6 +82,7 @@ Field dispatch offers two replayable contracts at any hour. Recover a marked cas
 | `scripts/hacking/` | Terminal sessions and the three minigames, with shared retro drawing/input helpers |
 | `scripts/ui/hud.gd` | Objectives, heading tape, projected markers, threat, resource display and transmission finale |
 | `scripts/ui/intro_cutscene.gd` | Procedural containment set, four-shot camera sequence, caption timing and skip input |
+| `scripts/ui/end_credits.gd` | Animated closing cards and skip input |
 | `scripts/ui/pause_menu.gd`, `operator_preview.gd` | Pause/controls, restart confirmation and isolated 3D character inspection |
 | `scripts/ui/prep_station_ui.gd` | Salvage purchases, fabrication, upgrades and rest UI |
 | `scripts/ui/supply_shop_ui.gd` | Credit shop catalog UI, keyboard/mouse selection and purchase feedback |
@@ -107,7 +108,8 @@ GDScript resource UIDs live in neighboring `.uid` files. README captures live in
 ## Important state transitions
 
 - Main pauses the mission world during the intro. The cinematic runs in its own 3D viewport and emits `finished` on skip or natural completion. Main then restores player input and HUD visibility and starts the mission.
-- `user://mission_checkpoint.cfg` stores the latest saved milestone and relay seed. Startup accepts the earlier credential-only save format. Restoring core access reopens the authenticated door. Restoring the database breach reveals the same relay and reapplies lockdown after navigation synchronizes. Restoring a completed upload shows the finale.
+- `user://mission_checkpoint.cfg` stores the latest saved milestone and relay seed. Startup accepts the earlier credential-only save format. Restoring core access reopens the authenticated door. Restoring the database breach reveals the same relay and reapplies lockdown after navigation synchronizes. Restoring a completed upload shows the finale directly.
+- When a live mission or presentation upload reaches 100%, `MissionDirector.upload_finished` tells `main.gd` to hold the completion splash for two seconds, then pause the world and play the 12-second `EndCredits` canvas layer. Natural completion and skip both return to the finale. The normal mission completion screen accepts Ctrl+S, and R starts a fresh run from either completion screen.
 - The presentation shortcut uses the normal transmission progress and completion path with a six-second duration and suppresses capture for the preview. Checkpoint writes are disabled for that run.
 
 - Hunter port extraction emits `suit_packet_copied()`. The mission sets `has_suit_packet`, disables further extraction, enables the decoder, changes objective text and exposes its waypoint.

@@ -19,6 +19,7 @@ signal radio_message(text: String)
 signal signal_reported(world_position: Vector3)
 signal relay_spoofed(world_position: Vector3)
 signal mission_completed(elapsed_seconds: float, captures: int)
+signal upload_finished()
 signal lockdown_started()
 signal mission_reset()
 signal suit_extraction_changed(enabled: bool)
@@ -440,6 +441,7 @@ func _update_transmission(delta: float) -> void:
 	transmission_progress.emit(transmit_progress, in_range or demo_upload)
 	if transmit_progress >= 1.0:
 		_complete()
+		upload_finished.emit()
 
 
 func start_demo_upload() -> void:

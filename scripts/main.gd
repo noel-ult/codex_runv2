@@ -9,6 +9,7 @@ extends Node3D
 @export var mission_seed: int = 0
 
 const GRAPHICS_SETTINGS: String = "user://graphics.cfg"
+const ENDING_HOLD_SECONDS: float = 2.0
 
 @onready var _city: GreyboxCityBuilder = $NavigationRegion3D/City
 @onready var _player: PlayerController = $Player
@@ -48,6 +49,7 @@ func _ready() -> void:
 	_mission.mission_completed.connect(func(_elapsed: float, _captures: int) -> void:
 		if _mission.demo_upload:
 			_hud.show_ending_restart_prompt())
+	_mission.upload_finished.connect(_queue_end_credits)
 	_pause.can_pause = func() -> bool: return not _terminal.is_open and not _prep.is_open and not _shop.is_open and not _rest_in_progress
 	_pause.restart_requested.connect(_restart_run)
 	_pause.graphics_preset_changed.connect(_save_graphics_preset)
@@ -59,7 +61,7 @@ func _ready() -> void:
 	_director.runner_is_sheltered = _city.hideout.protects_runner.bind(_player)
 	_player.shelter_check = _director.runner_is_sheltered
 	_director.runner_caught.connect(func() -> void:
-		if not _mission.demo_upload:
+		if not _mission.demo_upload and not _mission.completed:
 			_player.on_caught())
 	_player.captured.connect(_director.on_runner_respawned)
 	_director.spawn_hunters(_city.hunter_spawn_points, _city.patrol_points)
@@ -116,6 +118,25 @@ func _finish_intro(intro: IntroCutscene) -> void:
 	get_tree().paused = false
 	_refresh_modal_input()
 	_mission.start()
+
+
+func _queue_end_credits() -> void:
+	var transition := create_tween()
+	transition.tween_interval(ENDING_HOLD_SECONDS)
+	transition.tween_callback(_play_end_credits)
+
+
+func _play_end_credits() -> void:
+	var credits := EndCredits.new()
+	add_child(credits)
+	credits.finished.connect(_finish_end_credits.bind(credits), CONNECT_ONE_SHOT)
+	get_tree().paused = true
+	credits.play()
+
+
+func _finish_end_credits(credits: EndCredits) -> void:
+	credits.queue_free()
+	get_tree().paused = false
 
 
 func _setup_services() -> void:

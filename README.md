@@ -34,7 +34,7 @@ The 23-second opening cutscene follows the Runner into Meridian Labs, through fi
 
 ![The Runner approaching the Codex in Meridian Labs during the opening cutscene](docs/screenshots/intro.jpg)
 
-To preview the ending, press **Ctrl+Shift+F10** during active on-foot gameplay. The demo moves the Runner to the live relay and runs a six-second upload with capture disabled. The completion screen prompts you to press **R** to play again. Demo progress cannot be saved, and **R** clears the existing checkpoint.
+To preview the ending, press **Ctrl+Shift+F10** during active on-foot gameplay. The demo moves the Runner to the live relay and runs a six-second upload with capture disabled, followed by the completion screen and animated credits. Demo progress cannot be saved, and **R** clears the existing checkpoint.
 
 ## Play the heist
 
@@ -47,6 +47,12 @@ You carry the **Codex**. Send it to safety through the Hunters’ own uplink.
 3. **Breach the Main Hunter Database** in three retro layers on the CRT terminal: **Signal Lock**, then **Firewall Override**, then **Cipher Recovery**. Mistakes raise the **TRACE** meter. At 100%, HunterNet raises the alarm and locks the terminal for 20 s.
 4. **Lockdown.** A successful breach reveals the live relay and triggers HunterNet lockdown. The Hunters converge, the relay guard doubles, and the base Codex Release interval drops to 20 s. Before starting the uplink, you can use the violet relay marker to send a false handshake and divert up to two Hunters for 24 seconds.
 5. **Transmit.** Hold **E** at the live relay and spend **50 seconds** within **16 metres** while the uplink broadcasts your position. Moving out of range pauses progress.
+
+### Finale and end credits
+
+A completed uplink shows **Codex Transmitted** for roughly two seconds, then plays a 12-second animated credit sequence. Press **Space** or **Esc** during the credits to return to the completion screen early. Press **R** to play again. After a regular mission, press **Ctrl+S** to save completion. Loading a completed checkpoint returns directly to the completion screen.
+
+![End credits project card with the animated uplink graphic and skip controls](docs/screenshots/end-credits.jpg)
 
 ### Checkpoint and capture
 
@@ -82,7 +88,7 @@ Cipher Recovery uses Wordle-style clues on each submitted tile. **Green** means 
 | --- | --- |
 | W/A/S/D or arrow keys | Move on foot or drive and steer a vehicle |
 | Mouse | Camera |
-| Space | Jump, or press again in the air to Leap. Brakes while driving. |
+| Space | Jump, or press again in the air to Leap. Brake while driving or skip the intro or credits. |
 | Q | Leap from the ground |
 | Shift | **Dash** |
 | F | Toggle **Full Form** |
@@ -95,7 +101,7 @@ Cipher Recovery uses Wordle-style clues on each submitted tile. **Green** means 
 | Tab | Toggle the objective log |
 | Ctrl+S | Save the latest completed mission objective |
 | R | Restart Run (clears the mission checkpoint) |
-| Esc | Pause or resume play, skip the intro, or leave the open terminal, workbench or shop |
+| Esc | Pause or resume play, skip the intro or credits, or leave the open terminal, workbench or shop |
 
 Open **Esc → Controls** to check the current bindings for gameplay, terminal minigames, and the workbench. **Esc → Operators** lets you inspect the Runner, Hunter, Civilian, and Technician in 3D. Drag the model to rotate it, or use the left and right arrows while the preview has focus.
 
@@ -242,7 +248,7 @@ The marked **SUPPLIES** counter sits on the sidewalk beside Meridian Labs. Hold 
 | `scripts/player/`, `scripts/systems/` and `scripts/gadgets/` | Player movement, stances, Codex signals, gadget inventory and deployables |
 | `scripts/ai/` and `scripts/facility/` | Hunter patrol and pursuit, Hunter equipment, lab layout and security |
 | `scripts/mission/`, `scripts/interaction/` and `scripts/hacking/` | Objective state, checkpoint, relay transmission, field contracts, interaction holds and minigames |
-| `scripts/economy/` and `scripts/ui/` | Credits, courier deliveries, HUD, menus, workbench, shop and opening cutscene |
+| `scripts/economy/` and `scripts/ui/` | Currency, courier deliveries, HUD, menus, workbench, shop, opening cutscene and end credits |
 | `shaders/` | Surface materials, CRT effects, operator stage lighting and shared shader code |
 
 ### Runtime design
@@ -250,6 +256,7 @@ The marked **SUPPLIES** counter sits on the sidewalk beside Meridian Labs. Hold 
 - **Procedural city:** `GeometryKit`, `BuildingFactory`, `PropFactory` and `VehicleModel` assemble the world. Compatible static meshes are batched before runtime navigation baking. Collision bodies remain available for physics and navigation.
 - **Procedural characters:** `HumanoidRig` lofts skinned surfaces into an `ArrayMesh` and drives poses with a 17-bone `Skeleton3D`. Seeded outfits let disguises reproduce the appearance of the copied NPC.
 - **Opening cutscene:** `IntroCutscene` uses an isolated `SubViewport` for four procedural camera shots. `main.gd` pauses the world during playback and starts the mission when the cutscene finishes or is skipped.
+- **End credits:** `main.gd` starts the `EndCredits` canvas layer after the completion splash. The layer animates the credits, handles skip input and returns control to the finale when playback ends.
 - **Checkpoint storage:** `MissionDirector` writes the saved objective and relay seed to `user://mission_checkpoint.cfg`. It restores the mission state and markers on startup and after capture.
 - **Signals and interaction:** `PlayerController` and `CodexSignalSystem` avoid Hunter AI dependencies. `main.gd` routes Codex and mission position reports to the Hunter director. Gadget effects use groups such as `electronics` and `emp_receivers` with methods such as `disable_for()` and `apply_emp()`.
 - **Environment:** `TimeOfDay` controls the sky, lighting, fog and `night_factor`. `WeatherSystem` controls rain and `wetness`. Security reads gameplay visibility and weather conditions from `WorldConditions`.
