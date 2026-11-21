@@ -14,6 +14,7 @@ var _status_material: StandardMaterial3D
 var _status_light: OmniLight3D
 var _beam: MeshInstance3D
 var _beam_material: StandardMaterial3D
+var _finale_beam: Node3D
 var _dish: Node3D
 var _plate: Label3D
 var _handshake: bool = false
@@ -23,6 +24,8 @@ var _spoof_left: float = 0.0
 var _time: float = 0.0
 
 const SPOOF_COLOR: Color = Color(0.78, 0.36, 1.0)
+const FINALE_BEAM_SHADER: Shader = preload("res://shaders/uplink_finale.gdshader")
+const FINALE_BEAM_HEIGHT: float = 205.0
 
 
 func _ready() -> void:
@@ -123,6 +126,34 @@ func set_transmission(progress: float) -> void:
 
 func get_marker_position() -> Vector3:
 	return global_position + Vector3(0.0, 4.0, 0.0)
+
+
+func begin_finale_beam() -> void:
+	_beam.hide()
+	_plate.text = "%s\nUPLINK COMPLETE" % station_label
+	_finale_beam = Node3D.new()
+	_finale_beam.position.y = 17.1
+	add_child(_finale_beam)
+	var material := ShaderMaterial.new()
+	material.shader = FINALE_BEAM_SHADER
+	material.set_shader_parameter(&"reach", 0.0)
+	material.set_shader_parameter(&"beam_length", FINALE_BEAM_HEIGHT)
+	var center := Vector3(0.0, FINALE_BEAM_HEIGHT * 0.5, 0.0)
+	var glow: MeshInstance3D = GeometryKit.cylinder(_finale_beam, center, 1.3, 0.65, FINALE_BEAM_HEIGHT, material, 24)
+	glow.set_instance_shader_parameter(&"strength", 0.25)
+	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var core: MeshInstance3D = GeometryKit.cylinder(_finale_beam, center, 0.19, 0.12, FINALE_BEAM_HEIGHT, material, 24)
+	core.set_instance_shader_parameter(&"strength", 0.95)
+	core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var launch: Tween = _finale_beam.create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	launch.tween_interval(0.35)
+	launch.tween_method(func(reach: float) -> void: material.set_shader_parameter(&"reach", reach),
+		0.0, 1.0, 2.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+
+
+func end_finale_beam() -> void:
+	_finale_beam.queue_free()
+	_finale_beam = null
 
 
 func _restore_status() -> void:

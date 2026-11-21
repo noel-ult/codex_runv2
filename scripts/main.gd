@@ -9,7 +9,6 @@ extends Node3D
 @export var mission_seed: int = 0
 
 const GRAPHICS_SETTINGS: String = "user://graphics.cfg"
-const ENDING_HOLD_SECONDS: float = 2.0
 
 @onready var _city: GreyboxCityBuilder = $NavigationRegion3D/City
 @onready var _player: PlayerController = $Player
@@ -49,7 +48,6 @@ func _ready() -> void:
 	_mission.mission_completed.connect(func(_elapsed: float, _captures: int) -> void:
 		if _mission.demo_upload:
 			_hud.show_ending_restart_prompt())
-	_mission.upload_finished.connect(_queue_end_credits)
 	_pause.can_pause = func() -> bool: return not _terminal.is_open and not _prep.is_open and not _shop.is_open and not _rest_in_progress
 	_pause.restart_requested.connect(_restart_run)
 	_pause.graphics_preset_changed.connect(_save_graphics_preset)
@@ -70,6 +68,7 @@ func _ready() -> void:
 	# positions to the Director; the hacking terminal freezes the Runner while open.
 	var run_seed: int = mission_seed if mission_seed != 0 else int(Time.get_unix_time_from_system())
 	var genuine: UplinkStation = _mission.setup(_player, _city.facility, _city.uplink_stations, _terminal, _director, run_seed)
+	_mission.upload_finished.connect(_play_end_credits.bind(genuine))
 	_mission.suit_extraction_changed.connect(_director.set_suit_extraction_enabled)
 	_mission.relay_spoofed.connect(_director.deploy_relay_spoof.bind(MissionDirector.RELAY_SPOOF_SECONDS))
 	var front: Vector3 = genuine.global_position + genuine.global_basis.z * 4.5
@@ -120,23 +119,21 @@ func _finish_intro(intro: IntroCutscene) -> void:
 	_mission.start()
 
 
-func _queue_end_credits() -> void:
-	var transition := create_tween()
-	transition.tween_interval(ENDING_HOLD_SECONDS)
-	transition.tween_callback(_play_end_credits)
-
-
-func _play_end_credits() -> void:
+func _play_end_credits(relay: UplinkStation) -> void:
 	var credits := EndCredits.new()
 	add_child(credits)
-	credits.finished.connect(_finish_end_credits.bind(credits), CONNECT_ONE_SHOT)
+	credits.finished.connect(_finish_end_credits.bind(credits, relay), CONNECT_ONE_SHOT)
+	_hud.hide()
 	get_tree().paused = true
-	credits.play()
+	relay.begin_finale_beam()
+	credits.play(relay)
 
 
-func _finish_end_credits(credits: EndCredits) -> void:
+func _finish_end_credits(credits: EndCredits, relay: UplinkStation) -> void:
+	relay.end_finale_beam()
 	credits.queue_free()
 	get_tree().paused = false
+	_refresh_modal_input()
 
 
 func _setup_services() -> void:

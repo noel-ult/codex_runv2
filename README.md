@@ -34,7 +34,7 @@ The 23-second opening cutscene follows the Runner into Meridian Labs, through fi
 
 ![The Runner approaching the Codex in Meridian Labs during the opening cutscene](docs/screenshots/intro.jpg)
 
-To preview the ending, press **Ctrl+Shift+F10** during active on-foot gameplay. The demo moves the Runner to the live relay and runs a six-second upload with capture disabled, followed by the completion screen and animated credits. Demo progress cannot be saved, and **R** clears the existing checkpoint.
+To preview the ending, press **Ctrl+Shift+F10** during active on-foot gameplay. The demo moves the Runner to the live relay and runs a six-second upload with capture disabled, followed by the finale cinematic and result screen. Demo progress cannot be saved, and **R** clears the existing checkpoint.
 
 ## Play the heist
 
@@ -50,9 +50,9 @@ You carry the **Codex**. Send it to safety through the Hunters’ own uplink.
 
 ### Finale and end credits
 
-A completed uplink shows **Codex Transmitted** for roughly two seconds, then plays a 12-second animated credit sequence. Press **Space** or **Esc** during the credits to return to the completion screen early. Press **R** to play again. After a regular mission, press **Ctrl+S** to save completion. Loading a completed checkpoint returns directly to the completion screen.
+When the upload reaches 100%, the camera lifts from the live relay mast into the city skyline along the beam. Credits fade in over the scene during the roughly 12-second cinematic, then the **Codex Transmitted** result screen appears. Press **Space** or **Esc** to skip to the result. Press **R** to play again. After a regular mission, press **Ctrl+S** to save completion. Loading a completed checkpoint goes directly to the result.
 
-![End credits project card with the animated uplink graphic and skip controls](docs/screenshots/end-credits.jpg)
+![End credits over the city skyline and live relay beam](docs/screenshots/end-credits.jpg)
 
 ### Checkpoint and capture
 
@@ -256,7 +256,7 @@ The marked **SUPPLIES** counter sits on the sidewalk beside Meridian Labs. Hold 
 - **Procedural city:** `GeometryKit`, `BuildingFactory`, `PropFactory` and `VehicleModel` assemble the world. Compatible static meshes are batched before runtime navigation baking. Collision bodies remain available for physics and navigation.
 - **Procedural characters:** `HumanoidRig` lofts skinned surfaces into an `ArrayMesh` and drives poses with a 17-bone `Skeleton3D`. Seeded outfits let disguises reproduce the appearance of the copied NPC.
 - **Opening cutscene:** `IntroCutscene` uses an isolated `SubViewport` for four procedural camera shots. `main.gd` pauses the world during playback and starts the mission when the cutscene finishes or is skipped.
-- **End credits:** `main.gd` starts the `EndCredits` canvas layer after the completion splash. The layer animates the credits, handles skip input and returns control to the finale when playback ends.
+- **Finale and end credits:** `UplinkStation` owns the world-space relay effects. At full upload, `EndCredits` briefly takes over the active player viewport camera and fades credits over the moving shot. `main.gd` restores the HUD and shows the result when playback ends or the player skips.
 - **Checkpoint storage:** `MissionDirector` writes the saved objective and relay seed to `user://mission_checkpoint.cfg`. It restores the mission state and markers on startup and after capture.
 - **Signals and interaction:** `PlayerController` and `CodexSignalSystem` avoid Hunter AI dependencies. `main.gd` routes Codex and mission position reports to the Hunter director. Gadget effects use groups such as `electronics` and `emp_receivers` with methods such as `disable_for()` and `apply_emp()`.
 - **Environment:** `TimeOfDay` controls the sky, lighting, fog and `night_factor`. `WeatherSystem` controls rain and `wetness`. Security reads gameplay visibility and weather conditions from `WorldConditions`.
